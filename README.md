@@ -45,7 +45,7 @@ SYNC_SECRET=              # A secret string to protect the /api/sync endpoint
 Add this script tag to your Webflow project (Site Settings → Custom Code → Footer):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/YOUR_USERNAME/algolia-webflow@latest/packages/library/dist/algolia-webflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@latest/packages/library/dist/algolia-webflow.min.js"></script>
 ```
 
 ### 3. Configure your Webflow page with data attributes
