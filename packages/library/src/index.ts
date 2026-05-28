@@ -100,6 +100,28 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
       }
     })
 
+    // Repeat containers — render one child per array value
+    itemRoot.querySelectorAll<HTMLElement>('[data-algolia-repeat]').forEach((container) => {
+      const field = container.getAttribute('data-algolia-repeat')!
+      const itemTemplate = container.querySelector<HTMLElement>('[data-algolia-repeat-item]')
+      if (!itemTemplate) return
+
+      itemTemplate.style.display = 'none'
+      container.querySelectorAll('[data-algolia-repeat-rendered]').forEach((el) => el.remove())
+
+      const values = hit[field]
+      if (!Array.isArray(values)) return
+
+      values.forEach((val) => {
+        const clone = itemTemplate.cloneNode(true) as HTMLElement
+        clone.removeAttribute('data-algolia-repeat-item')
+        clone.setAttribute('data-algolia-repeat-rendered', '')
+        clone.style.display = ''
+        clone.textContent = String(val ?? '')
+        container.appendChild(clone)
+      })
+    })
+
     list.appendChild(itemRoot)
   })
 }
