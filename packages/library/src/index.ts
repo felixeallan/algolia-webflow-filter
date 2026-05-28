@@ -122,6 +122,14 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
       })
     })
 
+    // Hide elements when their bound field is empty
+    itemRoot.querySelectorAll<HTMLElement>('[data-algolia-hide-empty]').forEach((el) => {
+      const field = el.getAttribute('data-algolia-hide-empty')!
+      const val = hit[field]
+      const isEmpty = val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)
+      el.style.display = isEmpty ? 'none' : ''
+    })
+
     list.appendChild(itemRoot)
   })
 }
