@@ -49,6 +49,15 @@ export default {
       const { ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME } = env
       const { triggerType, payload } = body
 
+      // Full re-sync on site publish
+      if (triggerType === 'site_publish') {
+        await fetch(env.SYNC_ENDPOINT, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${env.SYNC_SECRET}` },
+        })
+        return Response.json({ success: true, action: 'full_sync_triggered' })
+      }
+
       switch (triggerType) {
         case 'collection_item_created':
         case 'collection_item_changed':
