@@ -8,6 +8,7 @@ export interface AlgoliaInstance {
   // { category: Set(['shoes', 'bags']), brand: Set(['nike']) }
   filters: Map<string, Set<string>>
   sortIndex: string
+  urlState: boolean
   wrapper: HTMLElement
 }
 

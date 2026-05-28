@@ -40,6 +40,65 @@ async function runSearch(instance: AlgoliaInstance): Promise<void> {
   }
 
   render(instance, results)
+  if (instance.urlState) pushUrlState(instance)
+}
+
+// ─── URL state ────────────────────────────────────────────────────────────────
+
+function pushUrlState(instance: AlgoliaInstance): void {
+  const params = new URLSearchParams(window.location.search)
+
+  // Clear previous state for this instance's attributes
+  params.delete('q')
+  params.delete('page')
+  params.delete('sort')
+  instance.filters.forEach((_, attr) => params.delete(attr))
+
+  if (instance.query) params.set('q', instance.query)
+  if (instance.page > 0) params.set('page', String(instance.page))
+  if (instance.sortIndex) params.set('sort', instance.sortIndex)
+  instance.filters.forEach((values, attr) => {
+    if (values.size > 0) params.set(attr, [...values].join(','))
+  })
+
+  const qs = params.toString()
+  history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+}
+
+function readUrlState(instance: AlgoliaInstance, wrapper: HTMLElement): void {
+  const params = new URLSearchParams(window.location.search)
+
+  if (params.has('q')) {
+    instance.query = params.get('q')!
+    const searchInput = wrapper.querySelector<HTMLInputElement>('[data-algolia-search]')
+    if (searchInput) searchInput.value = instance.query
+  }
+
+  if (params.has('page')) instance.page = Number(params.get('page')) || 0
+
+  if (params.has('sort')) {
+    instance.sortIndex = params.get('sort')!
+    const sortSelect = wrapper.querySelector<HTMLSelectElement>('[data-algolia-sort]')
+    if (sortSelect) sortSelect.value = instance.sortIndex
+  }
+
+  // Restore filters
+  params.forEach((value, key) => {
+    if (['q', 'page', 'sort'].includes(key)) return
+    const values = value.split(',').filter(Boolean)
+    if (!values.length) return
+    instance.filters.set(key, new Set(values))
+
+    values.forEach((val) => {
+      const el = wrapper.querySelector<HTMLElement>(
+        `[data-algolia-filter="${key}"][data-algolia-value="${val}"]`
+      )
+      if (el) forceFilterState(el, true)
+    })
+
+    const sel = wrapper.querySelector<HTMLSelectElement>(`[data-algolia-filter-select="${key}"]`)
+    if (sel && values[0]) sel.value = values[0]
+  })
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -185,6 +244,7 @@ function initInstance(wrapper: HTMLElement): void {
     page: 0,
     filters: new Map(),
     sortIndex: '',
+    urlState: wrapper.hasAttribute('data-algolia-url-state'),
     wrapper,
   }
 
@@ -348,7 +408,8 @@ function initInstance(wrapper: HTMLElement): void {
     search()
   })
 
-  // Initial search
+  // Initial search — restore URL state first if enabled
+  if (instance.urlState) readUrlState(instance, wrapper)
   search()
 }
 
