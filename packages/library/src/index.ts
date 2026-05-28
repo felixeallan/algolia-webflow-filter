@@ -146,13 +146,25 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function setNativeInput(el: HTMLElement, checked: boolean): void {
+  const input = el.querySelector<HTMLInputElement>('input[type="checkbox"], input[type="radio"]')
+  if (!input) return
+  input.checked = checked
+  // Dispatch change so Webflow's JS updates w--redirected-checked
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+  // Manually sync as fallback in case Webflow's handler doesn't fire
+  el.querySelectorAll<HTMLElement>('.w--redirected-checked')
+    .forEach((div) => div.classList.toggle('w--redirected-checked', checked))
+}
+
 function deactivateFilter(el: HTMLElement): void {
   el.removeAttribute('data-active')
-  // Uncheck hidden native input (Webflow custom checkboxes/radios)
-  const input = el.querySelector<HTMLInputElement>('input[type="checkbox"], input[type="radio"]')
-  if (input) input.checked = false
-  // Remove Webflow's visual checked class
-  el.querySelectorAll('.w--redirected-checked').forEach((div) => div.classList.remove('w--redirected-checked'))
+  setNativeInput(el, false)
+}
+
+function activateFilter(el: HTMLElement): void {
+  el.setAttribute('data-active', '')
+  setNativeInput(el, true)
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
@@ -205,14 +217,14 @@ function initInstance(wrapper: HTMLElement): void {
       const set = instance.filters.get(attribute)!
 
       if (isRadio) {
-        // Single-select: clear the whole group first
+        // Check wasActive BEFORE deactivating so we know the intended state
+        const wasActive = el.hasAttribute('data-active')
         wrapper.querySelectorAll<HTMLElement>(`[data-algolia-filter="${attribute}"]`)
           .forEach((other) => deactivateFilter(other))
         set.clear()
-        // Clicking the active radio again deselects it
-        if (!el.hasAttribute('data-active')) {
+        if (!wasActive) {
           set.add(value)
-          el.setAttribute('data-active', '')
+          activateFilter(el)
         }
       } else {
         // Multi-select: toggle
@@ -221,7 +233,7 @@ function initInstance(wrapper: HTMLElement): void {
           deactivateFilter(el)
         } else {
           set.add(value)
-          el.setAttribute('data-active', '')
+          activateFilter(el)
         }
       }
 
