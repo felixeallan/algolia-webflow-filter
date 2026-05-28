@@ -146,22 +146,22 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function setNativeInput(el: HTMLElement, checked: boolean): void {
-  const input = el.querySelector<HTMLInputElement>('input[type="checkbox"], input[type="radio"]')
-  if (input) input.checked = checked
-  // Target the Webflow custom input divs directly so toggle works for both add and remove
+function getInput(el: HTMLElement): HTMLInputElement | null {
+  return el.querySelector<HTMLInputElement>('input[type="checkbox"], input[type="radio"]')
+}
+
+function syncWebflowVisual(el: HTMLElement, checked: boolean): void {
   el.querySelectorAll<HTMLElement>('.w-checkbox-input, .w-radio-input')
     .forEach((div) => div.classList.toggle('w--redirected-checked', checked))
 }
 
-function deactivateFilter(el: HTMLElement): void {
-  el.removeAttribute('data-active')
-  setNativeInput(el, false)
-}
-
-function activateFilter(el: HTMLElement): void {
-  el.setAttribute('data-active', '')
-  setNativeInput(el, true)
+// Programmatically force a filter element to (un)checked state — used by Clear buttons.
+// For user interactions, we listen to native change events instead.
+function forceFilterState(el: HTMLElement, checked: boolean): void {
+  el.toggleAttribute('data-active', checked)
+  const input = getInput(el)
+  if (input) input.checked = checked
+  syncWebflowVisual(el, checked)
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
@@ -201,42 +201,59 @@ function initInstance(wrapper: HTMLElement): void {
     })
   }
 
-  // Filter elements
+  // Filter elements — listen on the input's change event when present so we
+  // don't race with the browser/Webflow's own click handling. For plain divs
+  // (no input inside), fall back to a click toggle.
   wrapper.querySelectorAll<HTMLElement>('[data-algolia-filter]').forEach((el) => {
-    el.addEventListener('click', () => {
-      const attribute = el.getAttribute('data-algolia-filter')!
-      const value = el.getAttribute('data-algolia-value')!
-      const isRadio = !!el.querySelector('input[type="radio"]')
+    const attribute = el.getAttribute('data-algolia-filter')!
+    const value = el.getAttribute('data-algolia-value')!
+    const input = getInput(el)
 
-      if (!instance.filters.has(attribute)) {
-        instance.filters.set(attribute, new Set())
-      }
-      const set = instance.filters.get(attribute)!
+    if (input) {
+      input.addEventListener('change', () => {
+        if (!instance.filters.has(attribute)) instance.filters.set(attribute, new Set())
+        const set = instance.filters.get(attribute)!
 
-      if (isRadio) {
-        // Check wasActive BEFORE deactivating so we know the intended state
-        const wasActive = el.hasAttribute('data-active')
-        wrapper.querySelectorAll<HTMLElement>(`[data-algolia-filter="${attribute}"]`)
-          .forEach((other) => deactivateFilter(other))
-        set.clear()
-        if (!wasActive) {
-          set.add(value)
-          activateFilter(el)
+        if (input.type === 'radio') {
+          // Native: other radios in the same name group auto-uncheck
+          set.clear()
+          if (input.checked) set.add(value)
+          // Sync data-active across the entire group from the actual input state
+          wrapper.querySelectorAll<HTMLElement>(`[data-algolia-filter="${attribute}"]`)
+            .forEach((other) => {
+              const otherInput = getInput(other)
+              other.toggleAttribute('data-active', !!otherInput?.checked)
+            })
+        } else {
+          if (input.checked) {
+            set.add(value)
+            el.setAttribute('data-active', '')
+          } else {
+            set.delete(value)
+            el.removeAttribute('data-active')
+          }
         }
-      } else {
-        // Multi-select: toggle
+
+        instance.page = 0
+        search()
+      })
+    } else {
+      el.addEventListener('click', () => {
+        if (!instance.filters.has(attribute)) instance.filters.set(attribute, new Set())
+        const set = instance.filters.get(attribute)!
+
         if (set.has(value)) {
           set.delete(value)
-          deactivateFilter(el)
+          el.removeAttribute('data-active')
         } else {
           set.add(value)
-          activateFilter(el)
+          el.setAttribute('data-active', '')
         }
-      }
 
-      instance.page = 0
-      search()
-    })
+        instance.page = 0
+        search()
+      })
+    }
   })
 
   // Filter selects (e.g. year dropdown)
@@ -264,7 +281,7 @@ function initInstance(wrapper: HTMLElement): void {
         // Clear a specific filter group
         instance.filters.get(attribute)?.clear()
         wrapper.querySelectorAll<HTMLElement>(`[data-algolia-filter="${attribute}"]`)
-          .forEach((el) => deactivateFilter(el))
+          .forEach((el) => forceFilterState(el, false))
         wrapper.querySelectorAll<HTMLSelectElement>(`[data-algolia-filter-select="${attribute}"]`)
           .forEach((sel) => { sel.value = '' })
       } else {
@@ -273,7 +290,7 @@ function initInstance(wrapper: HTMLElement): void {
         instance.query = ''
         instance.sortIndex = ''
         wrapper.querySelectorAll<HTMLElement>('[data-algolia-filter]')
-          .forEach((el) => deactivateFilter(el))
+          .forEach((el) => forceFilterState(el, false))
         wrapper.querySelectorAll<HTMLSelectElement>('[data-algolia-filter-select]')
           .forEach((sel) => { sel.value = '' })
         const searchInput = wrapper.querySelector<HTMLInputElement>('[data-algolia-search]')
