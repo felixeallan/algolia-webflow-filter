@@ -214,6 +214,10 @@ function initInstance(wrapper: HTMLElement): void {
       // Runs before the browser's default label→input redirect.
       if (input.type === 'radio') {
         el.addEventListener('click', (e) => {
+          // The browser dispatches a synthetic click on the input as the
+          // label's default action; that click bubbles back here. Skip it,
+          // otherwise we'd undo the selection the user just made.
+          if (e.target === input) return
           if (input.checked) {
             e.preventDefault()
             input.checked = false
