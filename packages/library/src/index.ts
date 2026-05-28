@@ -210,6 +210,21 @@ function initInstance(wrapper: HTMLElement): void {
     const input = getInput(el)
 
     if (input) {
+      // Allow clicking an already-selected radio to deselect it.
+      // Runs before the browser's default label→input redirect.
+      if (input.type === 'radio') {
+        el.addEventListener('click', (e) => {
+          if (input.checked) {
+            e.preventDefault()
+            input.checked = false
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+            // Webflow listens on change of the checked radio, not the deselected one,
+            // so manually clear the visual class here
+            syncWebflowVisual(el, false)
+          }
+        })
+      }
+
       input.addEventListener('change', () => {
         if (!instance.filters.has(attribute)) instance.filters.set(attribute, new Set())
         const set = instance.filters.get(attribute)!
