@@ -47,9 +47,14 @@ async function runSearch(instance: AlgoliaInstance): Promise<void> {
 function render(instance: AlgoliaInstance, results: SearchResults): void {
   const { wrapper } = instance
   const list = wrapper.querySelector<HTMLElement>('[data-algolia-list]')
-  const template = wrapper.querySelector<HTMLTemplateElement>('[data-algolia-template]')
+  const templateEl = wrapper.querySelector('[data-algolia-template]')
 
-  if (!list || !template) return
+  if (!list || !templateEl) return
+
+  // Hide a div-based template so it doesn't show as an empty card
+  if (!(templateEl instanceof HTMLTemplateElement)) {
+    (templateEl as HTMLElement).style.display = 'none'
+  }
 
   // Remove previous results, keep the template in place
   list.querySelectorAll('[data-algolia-item]').forEach((el) => el.remove())
@@ -67,17 +72,23 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
   if (nextBtn) nextBtn.disabled = results.page >= results.nbPages - 1
 
   results.hits.forEach((hit) => {
-    const clone = template.content.cloneNode(true) as DocumentFragment
+    let itemRoot: HTMLElement
 
-    // Mark injected items so we can remove them on the next render
-    const root = clone.firstElementChild
-    if (root) root.setAttribute('data-algolia-item', '')
+    if (templateEl instanceof HTMLTemplateElement) {
+      const clone = templateEl.content.cloneNode(true) as DocumentFragment
+      itemRoot = clone.firstElementChild as HTMLElement
+    } else {
+      itemRoot = templateEl.cloneNode(true) as HTMLElement
+      itemRoot.removeAttribute('data-algolia-template')
+      itemRoot.style.display = ''
+    }
 
-    clone.querySelectorAll<HTMLElement>('[data-algolia-bind]').forEach((el) => {
+    itemRoot.setAttribute('data-algolia-item', '')
+
+    itemRoot.querySelectorAll<HTMLElement>('[data-algolia-bind]').forEach((el) => {
       const field = el.getAttribute('data-algolia-bind')!
       const attr = el.getAttribute('data-algolia-attr')
       const value = String(hit[field] ?? '')
-
       if (attr) {
         el.setAttribute(attr, value)
       } else {
@@ -85,7 +96,7 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
       }
     })
 
-    list.appendChild(clone)
+    list.appendChild(itemRoot)
   })
 }
 
