@@ -234,6 +234,37 @@ function initInstance(wrapper: HTMLElement): void {
     })
   })
 
+  // Clear buttons
+  wrapper.querySelectorAll<HTMLElement>('[data-algolia-clear]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const attribute = btn.getAttribute('data-algolia-clear')
+
+      if (attribute) {
+        // Clear a specific filter group
+        instance.filters.get(attribute)?.clear()
+        wrapper.querySelectorAll<HTMLElement>(`[data-algolia-filter="${attribute}"]`)
+          .forEach((el) => el.removeAttribute('data-active'))
+        wrapper.querySelectorAll<HTMLSelectElement>(`[data-algolia-filter-select="${attribute}"]`)
+          .forEach((sel) => { sel.value = '' })
+      } else {
+        // Clear all filters, search and sort
+        instance.filters.clear()
+        instance.query = ''
+        instance.sortIndex = ''
+        wrapper.querySelectorAll<HTMLElement>('[data-algolia-filter]')
+          .forEach((el) => el.removeAttribute('data-active'))
+        wrapper.querySelectorAll<HTMLSelectElement>('[data-algolia-filter-select]')
+          .forEach((sel) => { sel.value = '' })
+        const searchInput = wrapper.querySelector<HTMLInputElement>('[data-algolia-search]')
+        if (searchInput) searchInput.value = ''
+        if (sortSelect) sortSelect.value = sortSelect.options[0]?.value ?? ''
+      }
+
+      instance.page = 0
+      search()
+    })
+  })
+
   // Sort
   const sortSelect = wrapper.querySelector<HTMLSelectElement>('[data-algolia-sort]')
   if (sortSelect) {
