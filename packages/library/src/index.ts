@@ -236,7 +236,8 @@ function initInstance(wrapper: HTMLElement): void {
 
   // Clear buttons
   wrapper.querySelectorAll<HTMLElement>('[data-algolia-clear]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault()
       const attribute = btn.getAttribute('data-algolia-clear')
 
       if (attribute) {
