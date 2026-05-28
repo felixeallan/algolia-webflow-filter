@@ -88,7 +88,11 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
     itemRoot.querySelectorAll<HTMLElement>('[data-algolia-bind]').forEach((el) => {
       const field = el.getAttribute('data-algolia-bind')!
       const attr = el.getAttribute('data-algolia-attr')
-      const value = String(hit[field] ?? '')
+      const raw = field.split('.').reduce<unknown>(
+        (obj, key) => (obj && typeof obj === 'object' ? (obj as Record<string, unknown>)[key] : undefined),
+        hit as unknown
+      )
+      const value = String(raw ?? '')
       if (attr) {
         el.setAttribute(attr, value)
       } else {
