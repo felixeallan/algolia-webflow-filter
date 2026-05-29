@@ -7,6 +7,8 @@ export interface AlgoliaInstance {
   page: number
   // { category: Set(['shoes', 'bags']), brand: Set(['nike']) }
   filters: Map<string, Set<string>>
+  // { price: { min: 1000, max: 50000 } }
+  ranges: Map<string, { min?: number; max?: number }>
   sortIndex: string
   urlState: boolean
   filterAttributes: Set<string>

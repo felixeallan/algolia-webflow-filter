@@ -16,6 +16,13 @@ async function runSearch(instance: AlgoliaInstance): Promise<void> {
     facetFilters.push(group.length === 1 ? group[0] : group)
   })
 
+  // Build numericFilters: [["price>=1000","price<=50000"]]
+  const numericFilters: string[] = []
+  instance.ranges.forEach((range, attribute) => {
+    if (range.min !== undefined) numericFilters.push(`${attribute}>=${range.min}`)
+    if (range.max !== undefined) numericFilters.push(`${attribute}<=${range.max}`)
+  })
+
   const indexName = instance.sortIndex || instance.indexName
 
   const response = await client.search({
@@ -26,6 +33,7 @@ async function runSearch(instance: AlgoliaInstance): Promise<void> {
         page: instance.page,
         hitsPerPage: instance.hitsPerPage,
         facetFilters: facetFilters.length ? facetFilters : undefined,
+        numericFilters: numericFilters.length ? numericFilters : undefined,
       },
     ],
   })
@@ -295,6 +303,7 @@ function initInstance(wrapper: HTMLElement): void {
     query: '',
     page: 0,
     filters: new Map(),
+    ranges: new Map(),
     sortIndex: '',
     urlState: wrapper.hasAttribute('data-algolia-url-state'),
     filterAttributes: new Set([
@@ -408,6 +417,33 @@ function initInstance(wrapper: HTMLElement): void {
     })
   })
 
+  // Range inputs (min/max number fields)
+  const updateRange = (attribute: string, bound: 'min' | 'max', raw: string) => {
+    if (!instance.ranges.has(attribute)) instance.ranges.set(attribute, {})
+    const range = instance.ranges.get(attribute)!
+    const parsed = raw === '' ? undefined : Number(raw)
+    if (parsed === undefined || Number.isNaN(parsed)) {
+      delete range[bound]
+    } else {
+      range[bound] = parsed
+    }
+    if (range.min === undefined && range.max === undefined) {
+      instance.ranges.delete(attribute)
+    }
+    instance.page = 0
+    debouncedSearch()
+  }
+
+  wrapper.querySelectorAll<HTMLInputElement>('[data-algolia-range-min]').forEach((input) => {
+    const attribute = input.getAttribute('data-algolia-range-min')!
+    input.addEventListener('input', () => updateRange(attribute, 'min', input.value))
+  })
+
+  wrapper.querySelectorAll<HTMLInputElement>('[data-algolia-range-max]').forEach((input) => {
+    const attribute = input.getAttribute('data-algolia-range-max')!
+    input.addEventListener('input', () => updateRange(attribute, 'max', input.value))
+  })
+
   // Clear buttons
   wrapper.querySelectorAll<HTMLElement>('[data-algolia-clear]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -417,19 +453,26 @@ function initInstance(wrapper: HTMLElement): void {
       if (attribute) {
         // Clear a specific filter group
         instance.filters.get(attribute)?.clear()
+        instance.ranges.delete(attribute)
         wrapper.querySelectorAll<HTMLElement>(`[data-algolia-filter="${attribute}"]`)
           .forEach((el) => forceFilterState(el, false))
         wrapper.querySelectorAll<HTMLSelectElement>(`[data-algolia-filter-select="${attribute}"]`)
           .forEach((sel) => { sel.value = '' })
+        wrapper.querySelectorAll<HTMLInputElement>(
+          `[data-algolia-range-min="${attribute}"], [data-algolia-range-max="${attribute}"]`
+        ).forEach((input) => { input.value = '' })
       } else {
         // Clear all filters, search and sort
         instance.filters.clear()
+        instance.ranges.clear()
         instance.query = ''
         instance.sortIndex = ''
         wrapper.querySelectorAll<HTMLElement>('[data-algolia-filter]')
           .forEach((el) => forceFilterState(el, false))
         wrapper.querySelectorAll<HTMLSelectElement>('[data-algolia-filter-select]')
           .forEach((sel) => { sel.value = '' })
+        wrapper.querySelectorAll<HTMLInputElement>('[data-algolia-range-min], [data-algolia-range-max]')
+          .forEach((input) => { input.value = '' })
         const searchInput = wrapper.querySelector<HTMLInputElement>('[data-algolia-search]')
         if (searchInput) searchInput.value = ''
         if (sortSelect) sortSelect.value = sortSelect.options[0]?.value ?? ''
