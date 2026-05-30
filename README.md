@@ -211,10 +211,10 @@ For sorting to behave numerically, the field must be a **number** in Algolia. If
 In Webflow → **Site Settings → Custom Code → Footer**:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.1.9/packages/library/dist/algolia-webflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.2.4/packages/library/dist/algolia-webflow.min.js"></script>
 ```
 
-**Always pin to a version tag** (e.g. `@v0.1.9`). Do not use `@main` — jsDelivr aggressively caches branch URLs.
+**Always pin to a version tag** (e.g. `@v0.2.4`). Do not use `@main` — jsDelivr aggressively caches branch URLs.
 
 ## Step 11 — Build the filter UI
 
@@ -333,6 +333,8 @@ See the **HTML structure** and **Data attribute reference** below.
 |---|---|---|
 | `data-algolia-filter="attr"` + `data-algolia-value="val"` | any (`<label>` recommended) | Click to filter. Auto-detects native `<input type="checkbox">` (multi-select) or `<input type="radio">` (single-select) inside. Same `attr` = OR; different attrs = AND. |
 | `data-algolia-filter-select="attr"` | `<select>` | Dropdown filter. Empty option (`value=""`) clears the filter. |
+| `data-algolia-range-min="attr"` | `<input type="number">` | Lower bound of a numeric range filter. Leave empty for open-ended. Field must be a **number** in Algolia. |
+| `data-algolia-range-max="attr"` | `<input type="number">` | Upper bound of a numeric range filter. |
 
 ## Sort
 
@@ -391,6 +393,19 @@ Renders one element per active filter, with an X button to remove individual fil
 | `data-algolia-tag-template` | child of tags container | Cloned once per active filter |
 | `data-algolia-tag-label` | any (inside tag template) | Gets the filter value as text (e.g. "Quasar", "White") |
 | `data-algolia-tag-remove` | any (inside tag template) | Clicking removes that filter. If missing, the whole tag is clickable. |
+
+## Scroll anchor
+
+Scrolls the page to a specific element on every filter, search, sort, or pagination change. Useful for long pages or sticky headers where filter results would otherwise be scrolled off-screen.
+
+| Attribute | Element | Description |
+|---|---|---|
+| `data-algolia-scroll-anchor` | any | Scrolls smoothly to this element on every filter change. Can be **inside or outside** the `[data-algolia]` wrapper. Skipped on initial page load to avoid an unexpected jump. |
+
+```html
+<!-- Place above the results section -->
+<div data-algolia-scroll-anchor></div>
+```
 
 ## Active filter styling
 
@@ -478,7 +493,7 @@ In Algolia → your index → **Manage index → Clear index** → type `CLEAR`.
 When a new version is released, update the version tag in the script URL:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.1.9/packages/library/dist/algolia-webflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.2.4/packages/library/dist/algolia-webflow.min.js"></script>
 ```
 
 Then **hard refresh** (Cmd/Ctrl+Shift+R) to bypass the browser cache.
