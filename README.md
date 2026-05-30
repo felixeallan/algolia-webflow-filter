@@ -331,9 +331,11 @@ See the **HTML structure** and **Data attribute reference** below.
 
 ## Filters
 
+> ⚠️ **Every attribute you filter by must be added as a Facet in Algolia.** Go to your index → **Configuration → Facets → Attributes for faceting** and add the field slug (e.g. `car-brand`, `featured`, `year`). Without this, the filter will silently return no results. After adding, click **Review and Save settings**.
+
 | Attribute | Element | Description |
 |---|---|---|
-| `data-algolia-filter="attr"` + `data-algolia-value="val"` | any (`<label>` recommended) | Click to filter. Auto-detects native `<input type="checkbox">` (multi-select) or `<input type="radio">` (single-select) inside. Same `attr` = OR; different attrs = AND. |
+| `data-algolia-filter="attr"` + `data-algolia-value="val"` | any (`<label>` recommended) | Click to filter. Auto-detects native `<input type="checkbox">` (multi-select) or `<input type="radio">` (single-select) inside. Same `attr` = OR; different attrs = AND. For boolean fields, use `"true"` or `"false"` as the value. |
 | `data-algolia-filter-all="attr"` | `<label>` containing a radio | "All" option for a radio filter group. Clicking it clears all selections in that group. Auto-activates whenever no specific filter is selected, so it acts as the default state on page load. Only meaningful for radios (checkboxes already use "nothing checked" to mean "show all"). |
 | `data-algolia-filter-select="attr"` | `<select>` | Dropdown filter. Empty option (`value=""`) clears the filter. |
 | `data-algolia-range-min="attr"` | `<input type="number">` | Lower bound of a numeric range filter. Leave empty for open-ended. Field must be a **number** in Algolia. |
@@ -491,6 +493,20 @@ It also stores **all sub-fields** of the referenced item as `field__subfield`. F
 ## Option fields (single/multi-select dropdowns)
 
 Stored as the option's name (e.g. `"White"`), not its internal ID. Use the name in your filter values.
+
+## Boolean fields (Switch / toggle)
+
+Webflow "Switch" fields are stored as real booleans in Algolia (`true` / `false`). Use the string `"true"` or `"false"` as the filter value:
+
+```html
+<!-- Toggle ON = show only featured items -->
+<label data-algolia-filter="featured" data-algolia-value="true" class="filter_toggle">
+  <input type="checkbox">
+  <span>Featured only</span>
+</label>
+```
+
+Toggle off = no filter = shows everything.
 
 ## Image fields
 
