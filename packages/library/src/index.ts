@@ -251,7 +251,14 @@ function renderTags(instance: AlgoliaInstance): void {
     if (label) {
       const minText = range.min !== undefined ? String(range.min) : 'Any'
       const maxText = range.max !== undefined ? String(range.max) : 'Any'
-      label.textContent = `${attribute}: ${minText} – ${maxText}`
+      // Optional custom label via data-algolia-range-label on either input
+      const rangeInput = wrapper.querySelector<HTMLElement>(
+        `[data-algolia-range-min="${attribute}"], [data-algolia-range-max="${attribute}"]`
+      )
+      const customLabel = rangeInput?.getAttribute('data-algolia-range-label')
+      label.textContent = customLabel
+        ? `${customLabel}: ${minText} – ${maxText}`
+        : `${minText} – ${maxText}`
     }
 
     const removeBtn = tag.querySelector<HTMLElement>('[data-algolia-tag-remove]') ?? tag
