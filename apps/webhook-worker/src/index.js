@@ -1,19 +1,3 @@
-async function algoliaUpsert(appId, apiKey, indexName, objectID, fields) {
-  const res = await fetch(
-    `https://${appId}.algolia.net/1/indexes/${indexName}/${encodeURIComponent(objectID)}`,
-    {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Algolia-Application-Id': appId,
-        'X-Algolia-API-Key': apiKey,
-      },
-      body: JSON.stringify({ objectID, ...fields }),
-    }
-  )
-  if (!res.ok) throw new Error(`Algolia upsert error: ${res.status}`)
-}
-
 async function algoliaDelete(appId, apiKey, indexName, objectID) {
   const res = await fetch(
     `https://${appId}.algolia.net/1/indexes/${indexName}/${encodeURIComponent(objectID)}`,
@@ -49,8 +33,14 @@ export default {
       const { ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME } = env
       const { triggerType, payload } = body
 
-      // Full re-sync on site publish
-      if (triggerType === 'site_publish') {
+      // Full re-sync on site publish AND on any create/change event
+      // (Per-item upserts would skip reference/option resolution, so we
+      //  always go through the sync endpoint which has that logic.)
+      if (
+        triggerType === 'site_publish' ||
+        triggerType === 'collection_item_created' ||
+        triggerType === 'collection_item_changed'
+      ) {
         await fetch(env.SYNC_ENDPOINT, {
           method: 'POST',
           headers: { Authorization: `Bearer ${env.SYNC_SECRET}` },
@@ -64,20 +54,12 @@ export default {
         return Response.json({ success: true, action: 'ignored' })
       }
 
-      switch (triggerType) {
-        case 'collection_item_created':
-        case 'collection_item_changed':
-          if (payload.isDraft || payload.isArchived) {
-            await algoliaDelete(ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME, payload.id)
-          } else {
-            await algoliaUpsert(ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME, payload.id, payload.fieldData)
-          }
-          break
-
-        case 'collection_item_deleted':
-        case 'collection_item_unpublished':
-          await algoliaDelete(ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME, payload.id)
-          break
+      // Delete/unpublish — handled instantly per item (no resolution needed)
+      if (
+        triggerType === 'collection_item_deleted' ||
+        triggerType === 'collection_item_unpublished'
+      ) {
+        await algoliaDelete(ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME, payload.id)
       }
 
       return Response.json({ success: true })
