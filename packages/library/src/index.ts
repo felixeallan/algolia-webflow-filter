@@ -678,7 +678,27 @@ function initInstance(wrapper: HTMLElement): void {
     window.addEventListener('resize', debounce(() => search(), 200))
   }
 
-  // Initial search — restore URL state first if enabled
+  // Read default checked/selected state from HTML so users can pre-activate filters
+  wrapper.querySelectorAll<HTMLElement>('[data-algolia-filter]').forEach((el) => {
+    const input = getInput(el)
+    if (input?.checked) {
+      const attribute = el.getAttribute('data-algolia-filter')!
+      const value = el.getAttribute('data-algolia-value')!
+      if (!instance.filters.has(attribute)) instance.filters.set(attribute, new Set())
+      instance.filters.get(attribute)!.add(value)
+      el.setAttribute('data-active', '')
+      syncWebflowVisual(el, true)
+    }
+  })
+  wrapper.querySelectorAll<HTMLSelectElement>('[data-algolia-filter-select]').forEach((sel) => {
+    if (sel.value) {
+      const attribute = sel.getAttribute('data-algolia-filter-select')!
+      if (!instance.filters.has(attribute)) instance.filters.set(attribute, new Set())
+      instance.filters.get(attribute)!.add(sel.value)
+    }
+  })
+
+  // URL state overrides HTML defaults (so a shared link wins)
   if (instance.urlState) readUrlState(instance, wrapper)
   search()
 }
