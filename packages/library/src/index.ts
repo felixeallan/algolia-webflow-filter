@@ -309,7 +309,9 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
   renderPages(instance, results.page, results.nbPages)
   syncFilterAllStates(instance)
 
-  results.hits.forEach((hit) => {
+  const staggerMs = Number(wrapper.getAttribute('data-algolia-stagger') ?? 0)
+
+  results.hits.forEach((hit, index) => {
     let itemRoot: HTMLElement
 
     if (templateEl instanceof HTMLTemplateElement) {
@@ -367,6 +369,16 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
       const isEmpty = val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)
       el.style.setProperty('display', isEmpty ? 'none' : '', isEmpty ? 'important' : '')
     })
+
+    if (staggerMs > 0) {
+      itemRoot.style.opacity = '0'
+      itemRoot.style.transition = 'opacity 0.4s ease, transform 0.4s ease'
+      itemRoot.style.transform = 'translateY(10px)'
+      setTimeout(() => {
+        itemRoot.style.opacity = '1'
+        itemRoot.style.transform = 'translateY(0)'
+      }, index * staggerMs)
+    }
 
     list.appendChild(itemRoot)
   })
