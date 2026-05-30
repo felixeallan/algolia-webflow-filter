@@ -211,10 +211,10 @@ For sorting to behave numerically, the field must be a **number** in Algolia. If
 In Webflow → **Site Settings → Custom Code → Footer**:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.3.2/packages/library/dist/algolia-webflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.3.4/packages/library/dist/algolia-webflow.min.js"></script>
 ```
 
-**Always pin to a version tag** (e.g. `@v0.3.2`). Do not use `@main` — jsDelivr aggressively caches branch URLs.
+**Always pin to a version tag** (e.g. `@v0.3.4`). Do not use `@main` — jsDelivr aggressively caches branch URLs.
 
 ## Step 11 — Build the filter UI
 
@@ -320,6 +320,7 @@ See the **HTML structure** and **Data attribute reference** below.
 | `data-index="..."` | wrapper | Algolia index name |
 | `data-hits-per-page="12"` | wrapper | Number of results per page (default 12) |
 | `data-algolia-url-state` | wrapper | (optional) Sync filters/search/page to URL params for shareable links |
+| `data-algolia-debounce="300"` | wrapper | (optional) Debounce delay in milliseconds before search/range inputs fire a search. Default `300`. Higher values reduce API calls for fast typers. |
 
 ## Search
 
@@ -336,6 +337,7 @@ See the **HTML structure** and **Data attribute reference** below.
 | `data-algolia-filter-select="attr"` | `<select>` | Dropdown filter. Empty option (`value=""`) clears the filter. |
 | `data-algolia-range-min="attr"` | `<input type="number">` | Lower bound of a numeric range filter. Leave empty for open-ended. Field must be a **number** in Algolia. |
 | `data-algolia-range-max="attr"` | `<input type="number">` | Upper bound of a numeric range filter. |
+| `data-algolia-range-label="Price"` | range input | (optional) Custom prefix used in the active filter tag for this range. Default tag shows just the value (`Any – 2000`); with this set it shows `Price: Any – 2000`. Add to either min or max input. |
 
 ## Sort
 
@@ -555,7 +557,7 @@ In Algolia → your index → **Manage index → Clear index** → type `CLEAR`.
 When a new version is released, update the version tag in the script URL:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.3.2/packages/library/dist/algolia-webflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.3.4/packages/library/dist/algolia-webflow.min.js"></script>
 ```
 
 Then **hard refresh** (Cmd/Ctrl+Shift+R) to bypass the browser cache.
