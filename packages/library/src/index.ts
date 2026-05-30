@@ -157,6 +157,36 @@ function renderTags(instance: AlgoliaInstance): void {
       container.appendChild(tag)
     })
   })
+
+  // Range tags (price, etc.)
+  instance.ranges.forEach((range, attribute) => {
+    if (range.min === undefined && range.max === undefined) return
+
+    const tag = tagTemplate.cloneNode(true) as HTMLElement
+    tag.removeAttribute('data-algolia-tag-template')
+    tag.setAttribute('data-algolia-tag-item', '')
+    tag.style.display = ''
+
+    const label = tag.querySelector<HTMLElement>('[data-algolia-tag-label]')
+    if (label) {
+      const minText = range.min !== undefined ? String(range.min) : 'Any'
+      const maxText = range.max !== undefined ? String(range.max) : 'Any'
+      label.textContent = `${attribute}: ${minText} – ${maxText}`
+    }
+
+    const removeBtn = tag.querySelector<HTMLElement>('[data-algolia-tag-remove]') ?? tag
+    removeBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      instance.ranges.delete(attribute)
+      wrapper.querySelectorAll<HTMLInputElement>(
+        `[data-algolia-range-min="${attribute}"], [data-algolia-range-max="${attribute}"]`
+      ).forEach((input) => { input.value = '' })
+      instance.page = 0
+      runSearch(instance)
+    })
+
+    container.appendChild(tag)
+  })
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
