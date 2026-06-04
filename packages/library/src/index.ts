@@ -4,7 +4,7 @@ import type { AlgoliaInstance, Hit, SearchResults } from './types'
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
-async function runSearch(instance: AlgoliaInstance): Promise<void> {
+async function runSearch(instance: AlgoliaInstance, append = false): Promise<void> {
   const client = liteClient(instance.appId, instance.apiKey)
 
   // Build facetFilters: same attribute = OR, different attributes = AND
@@ -47,7 +47,7 @@ async function runSearch(instance: AlgoliaInstance): Promise<void> {
     nbPages: result.nbPages ?? 0,
   }
 
-  render(instance, results)
+  render(instance, results, append)
   if (instance.urlState) pushUrlState(instance)
 }
 
@@ -278,7 +278,7 @@ function renderTags(instance: AlgoliaInstance): void {
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 
-function render(instance: AlgoliaInstance, results: SearchResults): void {
+function render(instance: AlgoliaInstance, results: SearchResults, append = false): void {
   const { wrapper } = instance
   const list = wrapper.querySelector<HTMLElement>('[data-algolia-list]')
   const templateEl = wrapper.querySelector('[data-algolia-template]')
@@ -291,7 +291,9 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
   }
 
   // Remove previous results, keep the template in place
-  list.querySelectorAll('[data-algolia-item]').forEach((el) => el.remove())
+  if (!append) {
+    list.querySelectorAll('[data-algolia-item]').forEach((el) => el.remove())
+  }
 
   const emptyEl = wrapper.querySelector<HTMLElement>('[data-algolia-empty]')
   const countEl = wrapper.querySelector<HTMLElement>('[data-algolia-count]')
@@ -383,14 +385,21 @@ function render(instance: AlgoliaInstance, results: SearchResults): void {
     list.appendChild(itemRoot)
   })
 
-  // Scroll to anchor on filter/search change (skip first render)
-  if (instance.hasRendered) {
+  // Scroll to anchor on filter/search change (skip first render and load-more append)
+  if (instance.hasRendered && !append) {
     const anchor =
       wrapper.querySelector<HTMLElement>('[data-algolia-scroll-anchor]') ??
       document.querySelector<HTMLElement>('[data-algolia-scroll-anchor]')
     anchor?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   instance.hasRendered = true
+
+  // Show/hide the Load More button based on whether more pages exist
+  const loadMoreBtn = wrapper.querySelector<HTMLElement>('[data-algolia-load-more]')
+  if (loadMoreBtn) {
+    const hasMore = results.page < results.nbPages - 1
+    loadMoreBtn.style.display = hasMore ? '' : 'none'
+  }
 }
 
 // ─── Debounce ─────────────────────────────────────────────────────────────────
@@ -691,6 +700,14 @@ function initInstance(wrapper: HTMLElement): void {
   nextBtn?.addEventListener('click', () => {
     instance.page++
     search()
+  })
+
+  // Load more — append next page instead of replacing
+  const loadMoreBtn = wrapper.querySelector<HTMLElement>('[data-algolia-load-more]')
+  loadMoreBtn?.addEventListener('click', (e) => {
+    e.preventDefault()
+    instance.page++
+    runSearch(instance, true)
   })
 
   // Re-render numbered pagination on resize so responsive siblings/boundaries update
