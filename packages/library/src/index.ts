@@ -279,7 +279,10 @@ function renderTags(instance: AlgoliaInstance): void {
       instance.ranges.delete(attribute)
       wrapper.querySelectorAll<HTMLInputElement>(
         `[data-algolia-range-min="${attribute}"], [data-algolia-range-max="${attribute}"]`
-      ).forEach((input) => { input.value = '' })
+      ).forEach((input) => {
+        input.value = ''
+        input.dispatchEvent(new CustomEvent('algolia-range-reset'))
+      })
       instance.page = 0
       runSearch(instance)
     })
