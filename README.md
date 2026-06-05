@@ -227,10 +227,10 @@ See the **HTML structure** and **Data attribute reference** below.
 ```html
 <div
   data-algolia
-  data-app-id="YOUR_APP_ID"
-  data-api-key="YOUR_SEARCH_ONLY_KEY"
-  data-index="cars"
-  data-hits-per-page="12"
+  data-algolia-app-id="YOUR_APP_ID"
+  data-algolia-api-key="YOUR_SEARCH_ONLY_KEY"
+  data-algolia-index="cars"
+  data-algolia-hits-per-page="12"
   data-algolia-url-state
 >
 
@@ -315,10 +315,10 @@ See the **HTML structure** and **Data attribute reference** below.
 | Attribute | Element | Description |
 |---|---|---|
 | `data-algolia` | any (wrapper div) | Marks the root. Everything else must be inside. |
-| `data-app-id="..."` | wrapper | Algolia Application ID |
-| `data-api-key="..."` | wrapper | Algolia **Search-Only** API key (safe to expose) |
-| `data-index="..."` | wrapper | Algolia index name |
-| `data-hits-per-page="12"` | wrapper | Number of results per page (default 12) |
+| `data-algolia-app-id="..."` | wrapper | Algolia Application ID |
+| `data-algolia-api-key="..."` | wrapper | Algolia **Search-Only** API key (safe to expose) |
+| `data-algolia-index="..."` | wrapper | Algolia index name |
+| `data-algolia-hits-per-page="12"` | wrapper | Number of results per page (default 12) |
 | `data-algolia-url-state` | wrapper | (optional) Sync filters/search/page to URL params for shareable links |
 | `data-algolia-debounce="300"` | wrapper | (optional) Debounce delay in milliseconds before search/range inputs fire a search. Default `300`. Higher values reduce API calls for fast typers. |
 | `data-algolia-stagger="50"` | wrapper | (optional) Delay in milliseconds between each result item's entrance animation (fade in + slide up). Default `0` (no animation). Suggested: `30–60` subtle, `80–120` more visible. |

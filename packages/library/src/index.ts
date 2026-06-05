@@ -446,12 +446,12 @@ function syncFilterAllStates(instance: AlgoliaInstance): void {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 function initInstance(wrapper: HTMLElement): void {
-  const appId = wrapper.getAttribute('data-app-id')
-  const apiKey = wrapper.getAttribute('data-api-key')
-  const indexName = wrapper.getAttribute('data-index')
+  const appId = wrapper.getAttribute('data-algolia-app-id')
+  const apiKey = wrapper.getAttribute('data-algolia-api-key')
+  const indexName = wrapper.getAttribute('data-algolia-index')
 
   if (!appId || !apiKey || !indexName) {
-    console.warn('[algolia-webflow] Missing data-app-id, data-api-key, or data-index on', wrapper)
+    console.warn('[algolia-webflow] Missing data-algolia-app-id, data-algolia-api-key, or data-algolia-index on', wrapper)
     return
   }
 
@@ -459,7 +459,7 @@ function initInstance(wrapper: HTMLElement): void {
     appId,
     apiKey,
     indexName,
-    hitsPerPage: Number(wrapper.getAttribute('data-hits-per-page') ?? 12),
+    hitsPerPage: Number(wrapper.getAttribute('data-algolia-hits-per-page') ?? 12),
     query: '',
     page: 0,
     filters: new Map(),
