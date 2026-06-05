@@ -383,7 +383,15 @@ For arrays / multi-reference fields where each value should render as a separate
 
 ## Pagination
 
-Two styles, can be used independently or together.
+Three independent options — pick whichever fits your layout:
+
+| Option | Attributes | Behavior |
+|---|---|---|
+| **Load More** | `data-algolia-load-more` | Appends next page to existing results. Never replaces. |
+| **Previous / Next** | `data-algolia-prev` `data-algolia-next` `data-algolia-page-info` | Replaces results. Standard back/forward navigation. |
+| **Numbered pages** | `data-algolia-pages` + templates | Replaces results. Lets user jump to any page. Supports dots and responsive siblings/boundaries. |
+
+You can combine **Previous / Next** with **Numbered pages** (common pattern). Avoid combining **Load More** with the others — it would create confusing UX since Load More appends while the others replace.
 
 ### Load More button
 
