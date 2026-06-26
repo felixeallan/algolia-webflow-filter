@@ -326,6 +326,10 @@ function clearResults(instance: AlgoliaInstance): void {
   const pageInfo = wrapper.querySelector<HTMLElement>('[data-algolia-page-info]')
   if (pageInfo) pageInfo.textContent = ''
 
+  wrapper.querySelectorAll<HTMLElement>('[data-algolia-query]').forEach((el) => {
+    el.textContent = ''
+  })
+
   const prevBtn = wrapper.querySelector<HTMLButtonElement>('[data-algolia-prev]')
   const nextBtn = wrapper.querySelector<HTMLButtonElement>('[data-algolia-next]')
   if (prevBtn) prevBtn.disabled = true
@@ -366,6 +370,10 @@ function render(instance: AlgoliaInstance, results: SearchResults, append = fals
   if (emptyEl) emptyEl.style.display = results.hits.length === 0 ? '' : 'none'
   if (countEl) countEl.textContent = String(results.nbHits)
   if (pageInfo) pageInfo.textContent = `Page ${results.page + 1} of ${results.nbPages}`
+
+  wrapper.querySelectorAll<HTMLElement>('[data-algolia-query]').forEach((el) => {
+    el.textContent = instance.query
+  })
   if (prevBtn) prevBtn.disabled = results.page === 0
   if (nextBtn) nextBtn.disabled = results.page >= results.nbPages - 1
 
