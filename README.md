@@ -321,6 +321,7 @@ See the **HTML structure** and **Data attribute reference** below.
 | `data-algolia-hits-per-page="12"` | wrapper | Number of results per page (default 12) |
 | `data-algolia-url-state` | wrapper | (optional) Sync filters/search/page to URL params for shareable links |
 | `data-algolia-match-mode="or"` | wrapper | (optional) Conditions matching logic between filter categories. Default (omit) = **AND** (narrow): an item must satisfy every selected category to appear. Set to `"or"` = **OR** (broad): an item matching any selected value across any category appears. Ranges (`data-algolia-range-*`) always stay AND with facets. |
+| `data-algolia-search-mode="empty"` | wrapper | (optional) Start with no results — the list stays empty until the user types a query. Use on dedicated search pages where showing all records before any input is undesirable. |
 | `data-algolia-debounce="300"` | wrapper | (optional) Debounce delay in milliseconds before search/range inputs fire a search. Default `300`. Higher values reduce API calls for fast typers. |
 | `data-algolia-stagger="50"` | wrapper | (optional) Delay in milliseconds between each result item's entrance animation (fade in + slide up). Default `0` (no animation). Suggested: `30–60` subtle, `80–120` more visible. |
 
@@ -328,7 +329,95 @@ See the **HTML structure** and **Data attribute reference** below.
 
 | Attribute | Element | Description |
 |---|---|---|
-| `data-algolia-search` | `<input>` | Text search input |
+| `data-algolia-search` | `<input>` | Text search input (inside a wrapper) |
+
+## Global search box (navbar / standalone)
+
+A standalone search input placed **outside** a `[data-algolia]` wrapper — e.g. in the navbar. It queries its own index independently and can redirect to a search page, show an autosuggest dropdown, or both.
+
+### Input attributes
+
+| Attribute | Element | Description |
+|---|---|---|
+| `data-algolia-search-box` | `<input>` | Marks this as a standalone global search input |
+| `data-algolia-app-id="..."` | `<input>` | Algolia Application ID |
+| `data-algolia-api-key="..."` | `<input>` | Algolia Search-Only API key |
+| `data-algolia-index="..."` | `<input>` | Index to query (e.g. `search_all`) |
+| `data-algolia-search-action="..."` | `<input>` | `redirect` (default) · `dropdown` · `both` |
+| `data-algolia-search-target="/search"` | `<input>` | URL of the results page (redirect/both mode). Default `/search` |
+| `data-algolia-search-param="q"` | `<input>` | URL query param name. Default `q` |
+
+### Autosuggest dropdown (dropdown / both mode)
+
+Place a container with `[data-algolia-autosuggest]` near the input (sibling, parent, or anywhere on page). Inside it, put one child template element with `[data-algolia-autosuggest-template]`. Use `[data-algolia-bind]` inside the template exactly as in the main results list.
+
+| Attribute | Element | Description |
+|---|---|---|
+| `data-algolia-autosuggest` | container div | Wrapper for the dropdown. Hidden by default; shown when suggestions exist |
+| `data-algolia-autosuggest-template` | child element | Cloned once per suggestion result |
+| `data-algolia-autosuggest-link` | `<a>` inside template | Automatically gets `href` set to the hit's `url` field |
+
+### Minimal example
+
+```html
+<!-- Navbar -->
+<div style="position:relative">
+  <input
+    type="text"
+    placeholder="Search…"
+    data-algolia-search-box
+    data-algolia-app-id="YOUR_APP_ID"
+    data-algolia-api-key="YOUR_SEARCH_KEY"
+    data-algolia-index="search_all"
+    data-algolia-search-action="both"
+    data-algolia-search-target="/search"
+  />
+
+  <div data-algolia-autosuggest>
+    <div data-algolia-autosuggest-template>
+      <a data-algolia-autosuggest-link>
+        <span data-algolia-bind="title"></span>
+        <span data-algolia-bind="type"></span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Search results page — reads ?q= from URL automatically via data-algolia-url-state -->
+<div
+  data-algolia
+  data-algolia-app-id="YOUR_APP_ID"
+  data-algolia-api-key="YOUR_SEARCH_KEY"
+  data-algolia-index="search_all"
+  data-algolia-search-mode="empty"
+  data-algolia-url-state
+>
+  <input type="text" data-algolia-search placeholder="Search…" />
+
+  <!-- Radio buttons to filter by type -->
+  <div data-algolia-filter="type" data-algolia-value="Car"><input type="radio" name="type" /> Cars</div>
+  <div data-algolia-filter="type" data-algolia-value="Make"><input type="radio" name="type" /> Makes</div>
+  <div data-algolia-filter="type" data-algolia-value="Author"><input type="radio" name="type" /> Authors</div>
+  <div data-algolia-filter="type" data-algolia-value="Page"><input type="radio" name="type" /> Pages</div>
+
+  <!-- Sort -->
+  <select data-algolia-sort>
+    <option value="search_all">Relevance</option>
+    <option value="search_all_date_desc">Newest</option>
+  </select>
+
+  <div data-algolia-list>
+    <div data-algolia-template>
+      <a data-algolia-bind="url" data-algolia-attr="href">
+        <img data-algolia-bind="image" data-algolia-attr="src" />
+        <p data-algolia-bind="title"></p>
+        <p data-algolia-bind="description"></p>
+        <span data-algolia-bind="type"></span>
+      </a>
+    </div>
+  </div>
+</div>
+```
 
 ## Filters
 
@@ -462,6 +551,7 @@ Adjust colors and sizing to match your design.
 | `data-algolia-template` | `<div>` or `<template>` | Cloned once per result (inside the list container). A regular `<div>` is fine — it's hidden automatically. |
 | `data-algolia-bind="field"` | any (inside template) | Sets the element's text content from the Algolia hit. Supports dot notation: `image.url`, `car-brand__logo.url`. |
 | `data-algolia-bind="field"` + `data-algolia-attr="name"` | any (inside template) | Sets an attribute (`src`, `href`, `alt`, etc.) instead of text content. |
+| `data-algolia-bind="field"` + `data-algolia-bind-format="date"` | any (inside template) | Formats the field as a human-readable date (e.g. `"June 10, 2024"`). Accepts a Webflow CMS ISO string (`"2026-06-25T18:30:00.000Z"`) or a Unix timestamp in seconds (`1718000000`). Renders nothing when the value is `0`, empty, or invalid — safe for records with no date. |
 | `data-algolia-hide-empty="field"` | any (inside template) | Hides this element when the bound field is empty, null, or an empty array. |
 
 ## Repeat (multi-value fields)
@@ -471,7 +561,44 @@ For arrays / multi-reference fields where each value should render as a separate
 | Attribute | Element | Description |
 |---|---|---|
 | `data-algolia-repeat="field"` | container | Renders one child per array value |
-| `data-algolia-repeat-item` | child (inside repeat container) | Template element cloned per array value. Its text content gets set to each value. |
+| `data-algolia-repeat-item` | child (inside repeat container) | Template element cloned per array value. Its text content gets set to each value — no `data-algolia-bind` needed or allowed. |
+
+```html
+<div data-algolia-hide-empty="authors" data-algolia-repeat="authors">
+  <span data-algolia-repeat-item class="author-tag"></span>
+</div>
+```
+
+### Filtering multi-reference fields
+
+Multi-reference fields (stored as arrays in Algolia) are fully filterable. Algolia indexes each value in the array individually, so a filter on one value matches any item where that value appears anywhere in the array.
+
+**Step 1 — Add the field as a Facet in Algolia**
+
+Go to your index → **Configuration → Facets → Attributes for faceting** and add the field slug (e.g. `authors`). Without this step, the filter returns zero results silently.
+
+**Step 2 — Add filter elements as normal**
+
+Use `data-algolia-filter` + `data-algolia-value` exactly as you would for any other field:
+
+```html
+<!-- Checkbox: multi-select (show items by any selected author) -->
+<label data-algolia-filter="authors" data-algolia-value="Charles Miller">
+  <input type="checkbox"><span>Charles Miller</span>
+</label>
+<label data-algolia-filter="authors" data-algolia-value="Emily Davis">
+  <input type="checkbox"><span>Emily Davis</span>
+</label>
+
+<!-- Or a dropdown -->
+<select data-algolia-filter-select="authors">
+  <option value="">All authors</option>
+  <option value="Charles Miller">Charles Miller</option>
+  <option value="Emily Davis">Emily Davis</option>
+</select>
+```
+
+The search input also works across multi-reference fields — add the field to **Searchable Attributes** in Algolia and the text search will match against all values in the array.
 
 ## Stats & empty state
 

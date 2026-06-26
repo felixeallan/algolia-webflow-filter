@@ -14,6 +14,7 @@ export interface AlgoliaInstance {
   urlState: boolean
   filterAttributes: Set<string>
   hasRendered: boolean
+  searchMode: 'normal' | 'empty'
   wrapper: HTMLElement
 }
 

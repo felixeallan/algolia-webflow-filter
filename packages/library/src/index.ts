@@ -345,12 +345,26 @@ function render(instance: AlgoliaInstance, results: SearchResults, append = fals
 
     itemRoot.querySelectorAll<HTMLElement>('[data-algolia-bind]').forEach((el) => {
       const field = el.getAttribute('data-algolia-bind')!
+      const format = el.getAttribute('data-algolia-bind-format')
       const attr = el.getAttribute('data-algolia-attr')
       const raw = field.split('.').reduce<unknown>(
         (obj, key) => (obj && typeof obj === 'object' ? (obj as Record<string, unknown>)[key] : undefined),
         hit as unknown
       )
-      const value = String(raw ?? '')
+
+      let value: string
+      if (format === 'date') {
+        const isIso = typeof raw === 'string' && raw.includes('T')
+        const date = isIso ? new Date(raw) : new Date((Number(raw) > 1e10 ? Number(raw) : Number(raw) * 1000))
+        if (!raw || isNaN(date.getTime()) || (!isIso && !Number(raw))) {
+          value = ''
+        } else {
+          value = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date)
+        }
+      } else {
+        value = String(raw ?? '')
+      }
+
       if (attr) {
         el.setAttribute(attr, value)
       } else {
@@ -648,6 +662,7 @@ function initInstance(wrapper: HTMLElement): void {
     matchMode: wrapper.getAttribute('data-algolia-match-mode')?.toLowerCase() === 'or' ? 'or' : 'and',
     urlState: wrapper.hasAttribute('data-algolia-url-state'),
     hasRendered: false,
+    searchMode: wrapper.getAttribute('data-algolia-search-mode') === 'empty' ? 'empty' : 'normal',
     filterAttributes: new Set([
       ...[...wrapper.querySelectorAll('[data-algolia-filter]')]
         .map((el) => el.getAttribute('data-algolia-filter')!),
@@ -931,11 +946,165 @@ function initInstance(wrapper: HTMLElement): void {
 
   // URL state overrides HTML defaults (so a shared link wins)
   if (instance.urlState) readUrlState(instance, wrapper)
+
+  // In empty mode, only run the initial search if there is already a query
+  // (e.g. restored from URL state or a pre-filled input).
+  if (instance.searchMode === 'empty' && !instance.query) return
   search()
+}
+
+// ─── Standalone search box (navbar / global search) ──────────────────────────
+//
+// Usage: place a plain input with [data-algolia-search-box] anywhere on the page.
+// Required attributes on the input:
+//   data-algolia-app-id       Algolia app ID
+//   data-algolia-api-key      Algolia search-only API key
+//   data-algolia-index        Index to query (e.g. "search_all")
+//   data-algolia-search-action  "redirect" | "dropdown" | "both"
+//
+// For redirect/both:
+//   data-algolia-search-target  URL of the search results page (default "/search")
+//   data-algolia-search-param   URL query param name (default "q")
+//
+// For dropdown/both: place a sibling container with [data-algolia-autosuggest]
+// containing a template child with [data-algolia-autosuggest-template].
+// Inside the template, use [data-algolia-bind="field"] as usual.
+// Add [data-algolia-autosuggest-link] on an <a> inside the template to auto-set href from "url".
+
+function initSearchBox(input: HTMLInputElement): void {
+  const appId = input.getAttribute('data-algolia-app-id')
+  const apiKey = input.getAttribute('data-algolia-api-key')
+  const indexName = input.getAttribute('data-algolia-index')
+  const action = (input.getAttribute('data-algolia-search-action') ?? 'redirect') as 'redirect' | 'dropdown' | 'both'
+  const targetUrl = input.getAttribute('data-algolia-search-target') ?? '/search'
+  const paramName = input.getAttribute('data-algolia-search-param') ?? 'q'
+
+  if (!appId || !apiKey || !indexName) {
+    console.warn('[algolia-webflow] data-algolia-search-box is missing app-id, api-key, or index', input)
+    return
+  }
+
+  const showDropdown = action === 'dropdown' || action === 'both'
+  const doRedirect = action === 'redirect' || action === 'both'
+
+  // Find the autosuggest container — look for a sibling or descendant of the input's parent
+  const suggestContainer = input.closest('[data-algolia-autosuggest]') ??
+    input.parentElement?.querySelector<HTMLElement>('[data-algolia-autosuggest]') ??
+    document.querySelector<HTMLElement>('[data-algolia-autosuggest]')
+
+  const suggestTemplate = suggestContainer?.querySelector<HTMLElement>('[data-algolia-autosuggest-template]')
+
+  if (showDropdown && (!suggestContainer || !suggestTemplate)) {
+    console.warn('[algolia-webflow] data-algolia-search-action="dropdown" requires a [data-algolia-autosuggest] container with a [data-algolia-autosuggest-template] child')
+  }
+
+  const client = liteClient(appId, apiKey)
+
+  const clearSuggestions = (): void => {
+    if (!suggestContainer) return
+    suggestContainer.querySelectorAll('[data-algolia-autosuggest-item]').forEach((el) => el.remove())
+    suggestContainer.style.display = 'none'
+  }
+
+  const renderSuggestions = (hits: Hit[]): void => {
+    if (!suggestContainer || !suggestTemplate) return
+    suggestContainer.querySelectorAll('[data-algolia-autosuggest-item]').forEach((el) => el.remove())
+
+    if (hits.length === 0) {
+      suggestContainer.style.display = 'none'
+      return
+    }
+
+    suggestTemplate.style.display = 'none'
+
+    hits.forEach((hit) => {
+      const item = suggestTemplate.cloneNode(true) as HTMLElement
+      item.removeAttribute('data-algolia-autosuggest-template')
+      item.setAttribute('data-algolia-autosuggest-item', '')
+      item.style.display = ''
+
+      // Bind fields using data-algolia-bind (same convention as the main library)
+      item.querySelectorAll<HTMLElement>('[data-algolia-bind]').forEach((el) => {
+        const field = el.getAttribute('data-algolia-bind')!
+        const attr = el.getAttribute('data-algolia-attr')
+        const raw = field.split('.').reduce<unknown>(
+          (obj, key) => (obj && typeof obj === 'object' ? (obj as Record<string, unknown>)[key] : undefined),
+          hit as unknown
+        )
+        const value = String(raw ?? '')
+        if (attr) {
+          el.setAttribute(attr, value)
+        } else {
+          el.textContent = value
+        }
+      })
+
+      // Auto-set href on any link with data-algolia-autosuggest-link
+      item.querySelectorAll<HTMLAnchorElement>('[data-algolia-autosuggest-link]').forEach((a) => {
+        const url = String(hit['url'] ?? '')
+        if (url) a.href = url
+      })
+
+      // Clicking a suggestion navigates and closes dropdown
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault() // prevent input blur before click registers
+        const url = String(hit['url'] ?? '')
+        if (url) window.location.href = url
+      })
+
+      suggestContainer.appendChild(item)
+    })
+
+    suggestContainer.style.display = ''
+  }
+
+  const querySuggestions = debounce(async (q: string) => {
+    if (!q.trim()) {
+      clearSuggestions()
+      return
+    }
+    try {
+      const response = await client.search({
+        requests: [{ indexName, query: q, hitsPerPage: 5 }],
+      })
+      const result = response.results[0] as SearchResponse<Hit>
+      renderSuggestions(result.hits)
+    } catch (err) {
+      console.warn('[algolia-webflow] autosuggest query failed', err)
+    }
+  }, 200)
+
+  input.addEventListener('input', () => {
+    if (showDropdown) querySuggestions(input.value)
+  })
+
+  input.addEventListener('blur', () => {
+    // Short delay so mousedown on a suggestion fires first
+    setTimeout(clearSuggestions, 150)
+  })
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && doRedirect) {
+      e.preventDefault()
+      clearSuggestions()
+      const q = input.value.trim()
+      if (q) {
+        window.location.href = `${targetUrl}?${paramName}=${encodeURIComponent(q)}`
+      }
+    }
+    if (e.key === 'Escape') {
+      clearSuggestions()
+      input.blur()
+    }
+  })
+
+  // Hide dropdown on initial load
+  if (suggestContainer) suggestContainer.style.display = 'none'
 }
 
 function init(): void {
   document.querySelectorAll<HTMLElement>('[data-algolia]').forEach(initInstance)
+  document.querySelectorAll<HTMLInputElement>('input[data-algolia-search-box]').forEach(initSearchBox)
   initInspector()
 }
 
