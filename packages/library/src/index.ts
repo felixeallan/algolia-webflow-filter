@@ -762,7 +762,8 @@ function initInstance(wrapper: HTMLElement): void {
     }
   }
 
-  // Submit button (manual search mode)
+  // Submit button (manual search mode). Also block the surrounding form's submit
+  // event — Webflow intercepts it before the click preventDefault can fire.
   if (submitBtn) {
     submitBtn.addEventListener('click', (e) => {
       e.preventDefault()
@@ -770,6 +771,11 @@ function initInstance(wrapper: HTMLElement): void {
       instance.page = 0
       search()
     })
+
+    const form = wrapper.closest('form') ?? wrapper.querySelector('form')
+    if (form) {
+      form.addEventListener('submit', (e) => e.preventDefault())
+    }
   }
 
   // Autosuggest wired to the wrapper's own search input.
