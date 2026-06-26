@@ -773,15 +773,16 @@ function initInstance(wrapper: HTMLElement): void {
           else el.textContent = value
         })
 
-        item.querySelectorAll<HTMLAnchorElement>('[data-algolia-autosuggest-link]').forEach((a) => {
-          const url = String(hit['url'] ?? '')
-          if (url) a.href = url
-        })
-
         item.addEventListener('mousedown', (e) => {
           e.preventDefault()
-          const url = String(hit['url'] ?? '')
-          if (url) window.location.href = url
+          const title = String(hit['title'] ?? '')
+          if (title && searchInput) {
+            searchInput.value = title
+            instance.query = title
+            instance.page = 0
+            runSearch(instance)
+          }
+          clearSuggest()
         })
 
         suggestContainer.appendChild(item)
@@ -1155,17 +1156,16 @@ function initSearchBox(input: HTMLInputElement): void {
         }
       })
 
-      // Auto-set href on any link with data-algolia-autosuggest-link
-      item.querySelectorAll<HTMLAnchorElement>('[data-algolia-autosuggest-link]').forEach((a) => {
-        const url = String(hit['url'] ?? '')
-        if (url) a.href = url
-      })
-
-      // Clicking a suggestion navigates and closes dropdown
+      // Clicking a suggestion fills the input and closes the dropdown.
+      // For the standalone box, also redirect to the search page if in redirect/both mode.
       item.addEventListener('mousedown', (e) => {
-        e.preventDefault() // prevent input blur before click registers
-        const url = String(hit['url'] ?? '')
-        if (url) window.location.href = url
+        e.preventDefault()
+        const title = String(hit['title'] ?? '')
+        if (title) input.value = title
+        clearSuggestions()
+        if (doRedirect) {
+          window.location.href = `${targetUrl}?${paramName}=${encodeURIComponent(title)}`
+        }
       })
 
       suggestContainer.appendChild(item)
