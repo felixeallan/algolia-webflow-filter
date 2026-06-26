@@ -1262,6 +1262,25 @@ function initSearchBox(input: HTMLInputElement): void {
 
   // Hide dropdown on initial load
   if (suggestContainer) suggestContainer.style.display = 'none'
+
+  // Prevent the surrounding Webflow form from submitting — block both the form
+  // submit event and any [data-algolia-submit] button inside the same form.
+  const form = input.closest('form')
+  if (form) {
+    form.addEventListener('submit', (e) => e.preventDefault())
+
+    const submitBtn = form.querySelector<HTMLElement>('[data-algolia-submit]')
+    if (submitBtn) {
+      submitBtn.addEventListener('click', (e) => {
+        e.preventDefault()
+        clearSuggestions()
+        const q = input.value.trim()
+        if (q && doRedirect) {
+          window.location.href = `${targetUrl}?${paramName}=${encodeURIComponent(q)}`
+        }
+      })
+    }
+  }
 }
 
 function init(): void {
