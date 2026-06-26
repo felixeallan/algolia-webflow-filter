@@ -6,6 +6,14 @@ import { initInspector } from './inspector'
 // ─── Search ──────────────────────────────────────────────────────────────────
 
 async function runSearch(instance: AlgoliaInstance, append = false): Promise<void> {
+  // Empty search mode: a blank query shows nothing rather than all records.
+  // Gated on searchMode so normal filter pages are unaffected.
+  if (instance.searchMode === 'empty' && !instance.query.trim()) {
+    clearResults(instance)
+    if (instance.urlState) pushUrlState(instance)
+    return
+  }
+
   const client = liteClient(instance.appId, instance.apiKey)
 
   // Build facetFilters:
@@ -290,6 +298,44 @@ function renderTags(instance: AlgoliaInstance): void {
 
     container.appendChild(tag)
   })
+}
+
+// ─── Clear results (empty search-mode idle state) ─────────────────────────────
+//
+// Resets the results UI to a blank idle state WITHOUT querying Algolia. Used by
+// empty search mode when there is no query text — on load, after clearing the
+// input, and after Clear All. Deliberately does NOT show the empty-state message
+// (that's reserved for a real search returning zero hits) and does NOT force the
+// "filter all" visual, so the after-clear state matches the on-load state.
+function clearResults(instance: AlgoliaInstance): void {
+  const { wrapper } = instance
+  const list = wrapper.querySelector<HTMLElement>('[data-algolia-list]')
+  const templateEl = wrapper.querySelector('[data-algolia-template]')
+
+  if (templateEl && !(templateEl instanceof HTMLTemplateElement)) {
+    (templateEl as HTMLElement).style.display = 'none'
+  }
+  if (list) list.querySelectorAll('[data-algolia-item]').forEach((el) => el.remove())
+
+  const emptyEl = wrapper.querySelector<HTMLElement>('[data-algolia-empty]')
+  if (emptyEl) emptyEl.style.display = 'none'
+
+  const countEl = wrapper.querySelector<HTMLElement>('[data-algolia-count]')
+  if (countEl) countEl.textContent = '0'
+
+  const pageInfo = wrapper.querySelector<HTMLElement>('[data-algolia-page-info]')
+  if (pageInfo) pageInfo.textContent = ''
+
+  const prevBtn = wrapper.querySelector<HTMLButtonElement>('[data-algolia-prev]')
+  const nextBtn = wrapper.querySelector<HTMLButtonElement>('[data-algolia-next]')
+  if (prevBtn) prevBtn.disabled = true
+  if (nextBtn) nextBtn.disabled = true
+
+  const loadMoreBtn = wrapper.querySelector<HTMLElement>('[data-algolia-load-more]')
+  if (loadMoreBtn) loadMoreBtn.style.display = 'none'
+
+  renderTags(instance)
+  renderPages(instance, 0, 0)
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -947,9 +993,8 @@ function initInstance(wrapper: HTMLElement): void {
   // URL state overrides HTML defaults (so a shared link wins)
   if (instance.urlState) readUrlState(instance, wrapper)
 
-  // In empty mode, only run the initial search if there is already a query
-  // (e.g. restored from URL state or a pre-filled input).
-  if (instance.searchMode === 'empty' && !instance.query) return
+  // runSearch handles empty mode internally: with no query it clears to a blank
+  // idle state (and hides the template) instead of querying. Safe to call always.
   search()
 }
 
