@@ -740,26 +740,32 @@ function initInstance(wrapper: HTMLElement): void {
 
   if (searchInput) {
     if (manualSearch) {
-      // Track the typed value without searching
+      // Manual mode: track the typed value without searching
       searchInput.addEventListener('input', () => {
         instance.query = searchInput.value
       })
-      // Enter submits (and never lets the surrounding Webflow form submit)
-      searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault()
-          instance.query = searchInput.value
-          instance.page = 0
-          search()
-        }
-      })
     } else {
+      // Instant mode: search as the user types
       searchInput.addEventListener('input', () => {
         instance.query = searchInput.value
         instance.page = 0
         debouncedSearch()
       })
     }
+
+    // Enter runs an immediate search in BOTH modes and prevents the surrounding
+    // Webflow form from submitting. preventDefault on keydown stops the form's
+    // submit event from being dispatched at all — a submit-event listener alone
+    // is not enough, because Webflow's own handler still fires and resets the
+    // input (wiping the query and hiding the results).
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        instance.query = searchInput.value
+        instance.page = 0
+        search()
+      }
+    })
   }
 
   // Always block the surrounding form's submit event — pressing Enter in the
