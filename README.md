@@ -1,6 +1,11 @@
-# Algolia × Webflow Filter Library
+# Algolia × Webflow Library
 
-A drop-in filtering solution for Webflow using Algolia. No 100-item CMS limit, full-text search, faceted filtering, pagination, URL state sync — all driven by HTML `data-*` attributes.
+A drop-in Algolia integration for Webflow, driven entirely by HTML `data-*` attributes. It powers **two independent features** — use one, or both:
+
+- **Filtering** — render a single CMS collection past Webflow's 100-item cap, with full-text search, faceted filtering, range sliders, sorting, pagination, and URL state sync.
+- **Federated search** — a single site-wide search index that aggregates **multiple CMS collections plus static pages** into one normalized result set, with autosuggest and a dedicated results page.
+
+Both share the same three-part architecture and the same client library — they differ only in which sync endpoint, which Algolia index, and which HTML you use. The setup below is split accordingly: a **shared foundation**, then **Feature A (Filtering)** and **Feature B (Federated search)** as separate tracks.
 
 ## How it works
 
@@ -9,26 +14,30 @@ Webflow CMS
     ↓  full sync (Next.js on Webflow Cloud)
 Algolia Index
     ↓  search-only API (client library)
-Webflow page (rendered with filters)
+Webflow page (rendered with filters or search)
 ```
 
 Three parts:
-1. **Sync app** (`apps/sync`) — Next.js on Webflow Cloud. Reads all CMS items via the Webflow API, resolves references and option fields to human-readable values, and pushes everything to Algolia.
-2. **Webhook worker** (`apps/webhook-worker`) — A Cloudflare Worker that listens for Webflow webhooks and keeps Algolia in sync incrementally (per-item changes) and triggers a full sync on site publish.
+1. **Sync app** (`apps/sync`) — Next.js on Webflow Cloud. Exposes two endpoints:
+   - `POST /api/sync` — full sync of **one** CMS collection into a filter index (resolves references and option fields to human-readable values). Powers **Feature A**.
+   - `POST /api/search-all` — aggregates **many** collections + static pages into one normalized federated index. Powers **Feature B**.
+2. **Webhook worker** (`apps/webhook-worker`) — A Cloudflare Worker that listens for Webflow webhooks, keeps the filter index in sync incrementally (per-item changes), and triggers a full re-sync of both endpoints on site publish.
 3. **Client library** (`packages/library`) — A vanilla JS bundle loaded via a single `<script>` tag in Webflow. Reads HTML attributes, queries Algolia, renders results, handles filters/search/pagination/tags.
 
 ---
 
 ## Prerequisites
 
-- A Webflow site with a CMS collection you want to filter
+- A Webflow site with one or more CMS collections you want to filter or search
 - A free [Algolia](https://www.algolia.com) account
 - A free [Cloudflare](https://dash.cloudflare.com) account (for the webhook worker)
 - A [GitHub](https://github.com) account
 
 ---
 
-# Setup
+# Setup — Part 1: Shared foundation
+
+Every project does these six steps once, regardless of whether you use filtering, federated search, or both. The feature-specific steps come afterward in **Feature A** and **Feature B**.
 
 ## Step 1 — Create your project from the template
 
@@ -37,26 +46,23 @@ Three parts:
 3. Name it (e.g. `my-site-algolia`) and make it **public** (required so jsDelivr can serve the script)
 4. Done — you have your own copy.
 
-## Step 2 — Create the Algolia index
+## Step 2 — Create an Algolia application
 
 1. Sign up at [algolia.com](https://www.algolia.com) and create an application
-2. Decide a name for your index (e.g. `products`, `blog-posts`, `cars`) — Algolia will create it automatically when the first sync runs, you do not need to create it manually
-3. Go to **Settings → API Keys** and copy these three values:
+2. Go to **Settings → API Keys** and copy these three values:
    - **Application ID** → `ALGOLIA_APP_ID`
-   - **Search API Key** → used later in the script tag (safe to expose)
+   - **Search API Key** → used later in the script tag (safe to expose in the browser)
    - **Write API Key** → `ALGOLIA_ADMIN_API_KEY` (keep secret, only used server-side)
 
-## Step 3 — Get the Webflow API credentials
+> You'll create the actual **index(es)** in the feature tracks below — Algolia creates an index automatically the first time you sync to it, so there's nothing to create manually here.
 
-### API token
+## Step 3 — Get the Webflow API token
 
 1. Webflow → **Site Settings → Apps & Integrations → API Access → Generate API Token**
 2. Permissions: **CMS: Read** (read-only is enough — the sync never writes back)
 3. Copy the token → `WEBFLOW_API_TOKEN`
 
-### Collection ID
-
-In Webflow → CMS → click your collection → **Settings** → copy the Collection ID → `WEBFLOW_COLLECTION_ID`.
+> Collection IDs are configured per feature — a single ID for Feature A, a list for Feature B.
 
 ## Step 4 — Deploy the sync app to Webflow Cloud
 
@@ -68,23 +74,86 @@ In Webflow → CMS → click your collection → **Settings** → copy the Colle
    - **Directory path**: `apps/sync`
    - **GitHub branch**: `main`
    - **Path**: `/api` (this becomes the URL prefix, e.g. `yoursite.com/api/sync`)
-4. Once the environment is created, go to **Environment Variables** and add all 6:
+4. Once the environment is created, go to **Environment Variables** and add these **base** variables (each feature adds a few more later):
    ```
    WEBFLOW_API_TOKEN        (Secret)
-   WEBFLOW_COLLECTION_ID    (Text)
    ALGOLIA_APP_ID           (Text)
    ALGOLIA_ADMIN_API_KEY    (Secret — this is the Write API Key)
-   ALGOLIA_INDEX_NAME       (Text — the name you chose, e.g. "products")
    SYNC_SECRET              (Secret — generate with: openssl rand -hex 32)
    ```
 5. Click **"Deploy latest commit"**. Wait for the deployment to go live.
 
-The endpoint health check should return `{"ok":true}`:
+> You'll come back to **Environment Variables** to add `WEBFLOW_COLLECTION_ID` + `ALGOLIA_INDEX_NAME` (Feature A) and/or `ALGOLIA_SEARCH_ALL_INDEX` + `SITE_URL` (Feature B), then redeploy.
+
+## Step 5 — Deploy the webhook worker (Cloudflare)
+
+The sync app handles bulk syncs; the webhook worker keeps Algolia current as editors publish/change/delete individual items. Webflow refuses to send webhooks to `*.webflow.io` domains, so this external worker is required.
+
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Create Worker** → **Hello World**
+2. Name it (e.g. `algolia-webflow-webhook`) → **Deploy**
+3. Click **"Edit code"**, delete everything, and paste the contents of [apps/webhook-worker/src/index.js](apps/webhook-worker/src/index.js) → **Deploy**
+4. Go to **Settings → Variables and Secrets** and add these **base** variables:
+   ```
+   ALGOLIA_APP_ID            (Text)
+   ALGOLIA_ADMIN_API_KEY     (Secret — the Write API Key)
+   SYNC_ENDPOINT             (Text — https://YOUR_SITE.webflow.io/api/sync)
+   SYNC_SECRET               (Secret — same as Webflow Cloud)
+   ```
+   Feature A adds `ALGOLIA_INDEX_NAME` + `WEBFLOW_COLLECTION_ID` (for per-item deletes); Feature B adds `SEARCH_ALL_ENDPOINT`.
+5. Note your worker URL — looks like `https://algolia-webflow-webhook.YOUR-USERNAME.workers.dev`
+
+Then register the webhooks. Webflow → **Site Settings → Apps & Integrations → Webhooks → Add Webhook** for each event below, all pointing at the worker URL:
+
+| Event | Purpose |
+|---|---|
+| `collection_item_created` | New items trigger a re-sync |
+| `collection_item_changed` | Edits trigger a re-sync |
+| `collection_item_deleted` | Deletes remove the item from the filter index |
+| `collection_item_unpublished` | Unpublished items removed from the filter index |
+| `site_publish` | Triggers a full re-sync of every configured endpoint |
+
+You do not need a webhook secret. Leave that field blank.
+
+## Step 6 — Add the library to your Webflow page
+
+In Webflow → **Site Settings → Custom Code → Footer**:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.8.13/packages/library/dist/algolia-webflow.min.js"></script>
+```
+
+**Always pin to a version tag** (e.g. `@v0.8.13`). Do not use `@main` — jsDelivr aggressively caches branch URLs.
+
+The same script tag powers both features — you don't add it twice.
+
+---
+
+# Feature A — Filter a collection
+
+Render one CMS collection past Webflow's 100-item cap, with faceted filters, ranges, sorting, and pagination. Complete the **shared foundation** above first.
+
+## A.1 — Configure the filter index
+
+1. In Webflow → CMS → click the collection you want to filter → **Settings** → copy the **Collection ID**.
+2. Decide an index name (e.g. `products`, `blog-posts`, `cars`).
+3. In your Webflow Cloud app → **Environment Variables**, add:
+   ```
+   WEBFLOW_COLLECTION_ID    (Text — the collection you're filtering)
+   ALGOLIA_INDEX_NAME       (Text — the index name you chose)
+   ```
+4. In your **Cloudflare Worker** → **Settings → Variables**, add the same two (so per-item deletes hit the right index and webhooks from other collections are ignored):
+   ```
+   ALGOLIA_INDEX_NAME       (Text)
+   WEBFLOW_COLLECTION_ID    (Text)
+   ```
+5. **Deploy latest commit** in Webflow Cloud and re-deploy the worker.
+
+Health check should return `{"ok":true}`:
 ```bash
 curl https://YOUR_SITE.webflow.io/api/sync
 ```
 
-## Step 5 — Run the initial full sync
+## A.2 — Run the initial sync
 
 ```bash
 curl -X POST https://YOUR_SITE.webflow.io/api/sync \
@@ -96,41 +165,9 @@ Expected response:
 { "success": true, "synced": 1234 }
 ```
 
-Check the Algolia dashboard → your index → **Browse** — all your CMS items should be there.
+Check Algolia → your index → **Browse** — all your CMS items should be there.
 
-## Step 6 — Create the webhook worker (Cloudflare)
-
-The sync app handles the initial bulk sync. The webhook worker keeps Algolia in sync as users publish/edit/delete individual CMS items. Webflow does not allow webhooks pointing to `*.webflow.io` domains, so we need an external worker.
-
-1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Create Worker** → **Hello World**
-2. Name it (e.g. `algolia-webflow-webhook`) → **Deploy**
-3. Click **"Edit code"**, delete everything, and paste the contents of [apps/webhook-worker/src/index.js](apps/webhook-worker/src/index.js) → **Deploy**
-4. Go to **Settings → Variables and Secrets** and add:
-   ```
-   ALGOLIA_APP_ID            (Text)
-   ALGOLIA_ADMIN_API_KEY     (Secret — the Write API Key)
-   ALGOLIA_INDEX_NAME        (Text)
-   WEBFLOW_COLLECTION_ID     (Text — so webhooks from other collections get ignored)
-   SYNC_ENDPOINT             (Text — https://YOUR_SITE.webflow.io/api/sync)
-   SYNC_SECRET               (Secret — same as Webflow Cloud)
-   ```
-5. Note your worker URL — looks like `https://algolia-webflow-webhook.YOUR-USERNAME.workers.dev`
-
-## Step 7 — Set up the Webflow webhooks
-
-Webflow → **Site Settings → Apps & Integrations → Webhooks → Add Webhook** for each event below. URL is the worker URL from Step 6:
-
-| Event | Purpose |
-|---|---|
-| `collection_item_created` | New items appear instantly in Algolia |
-| `collection_item_changed` | Edits sync instantly |
-| `collection_item_deleted` | Deletes remove from Algolia |
-| `collection_item_unpublished` | Unpublished items removed from Algolia |
-| `site_publish` | Triggers a full re-sync (for schema changes, new fields, reference updates) |
-
-You do not need a webhook secret. Leave that field blank.
-
-## Step 8 — Configure Algolia (Facets + Searchable Attributes)
+## A.3 — Configure Algolia (Facets + Searchable Attributes)
 
 In Algolia → your index → **Configuration**:
 
@@ -145,11 +182,11 @@ In Algolia → your index → **Configuration**:
 
 Click **"Review and Save settings"**.
 
-## Step 9 — (Optional) Configure sorting
+## A.4 — (Optional) Configure sorting
 
 Sorting in Algolia works through **replica indexes** — pre-sorted copies of the main index. Each user-facing sort option = one replica. Algolia keeps replicas in sync automatically.
 
-### 9.1 — Create one replica per sort option
+### A.4.1 — Create one replica per sort option
 
 In Algolia → your main index → **Configuration → Replicas → Create Replica**:
 
@@ -167,7 +204,7 @@ In Algolia → your main index → **Configuration → Replicas → Create Repli
 
 3. Click **Create**. Repeat for each sort option you want.
 
-### 9.2 — Configure each replica's Sort-by rule
+### A.4.2 — Configure each replica's Sort-by rule
 
 A replica is empty until you tell it how to sort. For **each** replica:
 
@@ -182,7 +219,7 @@ A replica is empty until you tell it how to sort. For **each** replica:
 
 > **Important:** Each replica must have **exactly one** Sort-by rule. Multiple rules turn additional ones into tiebreakers, which is rarely what you want for user-facing sorting. One replica = one dropdown option.
 
-### 9.3 — Add the sort dropdown to your page
+### A.4.3 — Add the sort dropdown to your page
 
 Use a native `<select>` element. In **Webflow Designer → Add panel → Forms → Select**, drag a Select field onto the page (not the navigation "Dropdown" component — that's a div-based menu and won't fire `change` events).
 
@@ -202,27 +239,13 @@ Then add `data-algolia-sort` and option values matching your replica names exact
 
 The empty option (`value=""`) keeps the default relevance ranking.
 
-### 9.4 — Caveat: sorting numbers stored as strings
+### A.4.4 — Caveat: sorting numbers stored as strings
 
 For sorting to behave numerically, the field must be a **number** in Algolia. If a field is stored as a string with commas (e.g. `"14,020"`), Algolia sorts it alphabetically — `"9,999"` would come after `"14,020"`. Use a Webflow **Number** field (not a Plain text field formatted to look like a number) for any field you plan to sort numerically.
 
-## Step 10 — Add the library to your Webflow page
+## A.5 — Build the filter UI
 
-In Webflow → **Site Settings → Custom Code → Footer**:
-
-```html
-<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.8.2/packages/library/dist/algolia-webflow.min.js"></script>
-```
-
-**Always pin to a version tag** (e.g. `@v0.8.2`). Do not use `@main` — jsDelivr aggressively caches branch URLs.
-
-## Step 11 — Build the filter UI
-
-See the **HTML structure** and **Data attribute reference** below.
-
----
-
-# HTML structure (full example)
+Drop this structure onto your Webflow page. Every attribute is documented in the **Data attribute reference** further below.
 
 ```html
 <div
@@ -308,6 +331,204 @@ See the **HTML structure** and **Data attribute reference** below.
 
 ---
 
+# Feature B — Federated search across collections
+
+A single site-wide search that returns results from **multiple CMS collections plus static pages** in one ranked list — think the search box in a site's navbar that can surface a product, a blog post, an author, and an "About" page side by side. Complete the **shared foundation** above first. This feature is fully independent of Feature A: you can run it on its own, or alongside filtering.
+
+## B.1 — How it works
+
+Federated search uses a **second Algolia index** (commonly named `search_all`) populated by the `POST /api/search-all` endpoint. That endpoint reads every source you configure and normalizes each record — no matter which collection it came from — into the same fixed seven-field shape:
+
+| Field | What it holds |
+|---|---|
+| `objectID` | Unique ID, prefixed per source (`car__<id>`, `author__<id>`, `page__about`) so IDs never collide across collections |
+| `title` | The result's headline |
+| `description` | Supporting text (optional per source) |
+| `url` | Absolute link to the page, built from `SITE_URL` + the item's slug |
+| `image` | Image URL **as a plain string** (already extracted — see the binding note in B.7) |
+| `type` | The source label (`"Car"`, `"Author"`, `"Page"`, …) — used for the type filter |
+| `date` | ISO date string (from the item's last-updated time); empty for static pages |
+
+Because every record has the same shape, **your search UI never changes** when you add or remove a collection — it always binds to `title`, `description`, `image`, `url`, `type`, `date`. The only thing that varies per project is the **config file** that maps each of your collections into these fields.
+
+## B.2 — Configure your sources
+
+Open [apps/sync/src/search-all-config.ts](apps/sync/src/search-all-config.ts). This is the **only file you edit** — the sync route itself is generic. It has two arrays:
+
+**`collections`** — one entry per CMS collection you want searchable:
+
+```ts
+export const collections: CollectionConfig[] = [
+  {
+    collectionId: 'YOUR_COLLECTION_ID',   // Webflow → CMS → collection → Settings
+    type: 'Product',                      // stored as "type"; drives the type filter
+    prefix: 'product',                    // objectID prefix → product__<item-id>
+    urlPattern: '/products/{slug}',       // {slug} is replaced with the item's slug
+    titleField: 'name',                   // Webflow field slug for the title
+    descriptionField: 'summary',          // optional — omit if the collection has none
+    imageField: 'main-image',             // optional — omit if the collection has none
+  },
+  // …add another object per collection
+]
+```
+
+| Key | Required | Purpose |
+|---|---|---|
+| `collectionId` | ✅ | The Webflow collection to pull from |
+| `type` | ✅ | Label stored in the `type` field (used by the type filter on the results page) |
+| `prefix` | ✅ | Keeps `objectID`s unique across collections |
+| `urlPattern` | ✅ | Relative path with `{slug}` placeholder; prefixed with `SITE_URL` at sync time |
+| `titleField` | ✅ | Field slug that becomes `title` |
+| `descriptionField` | optional | Field slug that becomes `description` (omit → empty) |
+| `imageField` | optional | Field slug that becomes `image` (omit → empty) |
+
+**`staticPages`** — pages that aren't CMS items (home, about, pricing…):
+
+```ts
+export const staticPages: StaticPage[] = [
+  { objectID: 'page__about',   title: 'About',   description: 'Learn about us',  urlPath: '/about'   },
+  { objectID: 'page__pricing', title: 'Pricing', description: 'Our plans',       urlPath: '/pricing' },
+]
+```
+
+> Field **slugs** are the lowercase-hyphenated API names, not the Designer display names (e.g. "Bio Summary" → `bio-summary`). If you're unsure of a slug, see [Inspecting the Webflow collection schema](#inspecting-the-webflow-collection-schema).
+
+## B.3 — Add the search env vars
+
+In your Webflow Cloud app → **Environment Variables**, add:
+
+```
+ALGOLIA_SEARCH_ALL_INDEX   (Text — the federated index name, e.g. "search_all")
+SITE_URL                   (Text — your site's base URL, no trailing slash, e.g. https://YOUR_SITE.webflow.io)
+```
+
+Then **Deploy latest commit**. (`WEBFLOW_API_TOKEN`, `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_API_KEY`, and `SYNC_SECRET` are already set from the foundation.)
+
+## B.4 — Run the initial search sync
+
+```bash
+curl -X POST https://YOUR_SITE.webflow.io/api/search-all \
+  -H "Authorization: Bearer YOUR_SYNC_SECRET"
+```
+
+The response breaks down what was indexed per `type`:
+```json
+{ "success": true, "synced": 1812, "breakdown": { "Product": 1786, "Author": 23, "Page": 3 } }
+```
+
+Check Algolia → your `search_all` index → **Browse** to confirm the normalized records.
+
+## B.5 — Configure Algolia for the search index
+
+In Algolia → your `search_all` index → **Configuration**:
+
+- **Searchable Attributes** (Ordered): add `title` then `description`.
+- **Facets → Attributes for faceting**: add `type` (required for the content-type filter on the results page).
+- **(Optional) Sorting by date** — create replicas exactly as in [A.4](#a4--optional-configure-sorting), one Sort-by rule each:
+
+  | Sort option | Replica name | Sort-by rule |
+  |---|---|---|
+  | Newest first | `search_all_date_desc` | `date` Descending |
+  | Oldest first | `search_all_date_asc` | `date` Ascending |
+
+Click **Review and Save settings**.
+
+## B.6 — Keep the search index live on edits
+
+Add one variable to your **Cloudflare Worker** → **Settings → Variables**:
+
+```
+SEARCH_ALL_ENDPOINT   (Text — https://YOUR_SITE.webflow.io/api/search-all)
+```
+
+Re-deploy the worker. Now whenever an item is created/changed or the site is published, the worker triggers a full re-sync of **both** the filter index and the search index.
+
+> **Why a full re-sync (and why it doesn't time out):** federated records are normalized from many collections, so the worker re-runs the whole `/api/search-all` build rather than patching one record. It fires that request with `ctx.waitUntil()`, which keeps the Worker alive until the (multi-second) sync finishes — a bare un-awaited `fetch()` would be cancelled the instant the Worker returns its response. This is already handled in the worker code; just make sure `SEARCH_ALL_ENDPOINT` points at the **same domain** as your live sync app.
+
+## B.7 — Build the search UI
+
+A federated search experience is usually two pieces: a **standalone search box** in the navbar (with optional autosuggest) and a dedicated **results page**.
+
+```html
+<!-- 1. Navbar search box (lives outside any [data-algolia] wrapper) -->
+<div style="position:relative">
+  <input
+    type="text"
+    placeholder="Search…"
+    data-algolia-search-box
+    data-algolia-app-id="YOUR_APP_ID"
+    data-algolia-api-key="YOUR_SEARCH_KEY"
+    data-algolia-index="search_all"
+    data-algolia-search-action="both"
+    data-algolia-search-target="/search"
+  />
+
+  <!-- Optional autosuggest dropdown -->
+  <div data-algolia-autosuggest>
+    <div data-algolia-autosuggest-template>
+      <a data-algolia-autosuggest-link>
+        <span data-algolia-bind="title"></span>
+        <span data-algolia-bind="type"></span>
+      </a>
+    </div>
+  </div>
+</div>
+```
+
+```html
+<!-- 2. Results page (e.g. at /search) — reads ?q= from the URL automatically -->
+<div
+  data-algolia
+  data-algolia-app-id="YOUR_APP_ID"
+  data-algolia-api-key="YOUR_SEARCH_KEY"
+  data-algolia-index="search_all"
+  data-algolia-search-mode="empty"
+  data-algolia-url-state
+>
+  <input type="text" data-algolia-search placeholder="Search…" />
+
+  <!-- Show the current query, e.g. "Results for 'tesla'" -->
+  <p>Results for "<span data-algolia-query></span>" — <span data-algolia-count></span> found</p>
+
+  <!-- Filter by content type (values must match the `type` labels in your config) -->
+  <label data-algolia-filter-all="type"><input type="radio" name="type"> All</label>
+  <label data-algolia-filter="type" data-algolia-value="Product"><input type="radio" name="type"> Products</label>
+  <label data-algolia-filter="type" data-algolia-value="Author"><input type="radio" name="type"> Authors</label>
+  <label data-algolia-filter="type" data-algolia-value="Page"><input type="radio" name="type"> Pages</label>
+
+  <!-- Optional sort (needs the replicas from B.5) -->
+  <select data-algolia-sort>
+    <option value="search_all">Relevance</option>
+    <option value="search_all_date_desc">Newest</option>
+  </select>
+
+  <div data-algolia-list>
+    <div data-algolia-template>
+      <a data-algolia-bind="url" data-algolia-attr="href">
+        <!-- image is a plain URL string here — bind "image", NOT "image.url" -->
+        <img data-algolia-bind="image" data-algolia-attr="src" data-algolia-hide-empty="image">
+        <p data-algolia-bind="title"></p>
+        <p data-algolia-bind="description"></p>
+        <span data-algolia-bind="type"></span>
+        <span data-algolia-bind="date" data-algolia-bind-format="date"></span>
+      </a>
+    </div>
+  </div>
+
+  <div data-algolia-empty style="display:none">No results found.</div>
+</div>
+```
+
+Three things specific to federated search:
+
+- **Bind `image`, not `image.url`.** The `/api/search-all` route extracts the image URL into a plain string during sync, so the field is already a URL. (Feature A's filter index keeps Webflow's nested image object, where you bind `image.url`.) Add `data-algolia-hide-empty="image"` so sources without an image — like static pages — don't render a broken `<img>`.
+- **`data-algolia-search-mode="empty"`** keeps the results page blank until the visitor types, instead of dumping every record on load.
+- **Type filter values must match your config's `type` labels exactly** (`"Product"`, `"Author"`, `"Page"`…). These are facet filters, which is why `type` had to be added as a facet in B.5.
+
+See the **Global search box** and **Autosuggest** entries in the reference below for every standalone-input and dropdown option.
+
+---
+
 # Data attribute reference
 
 ## Wrapper (required)
@@ -361,7 +582,7 @@ Place a container with `[data-algolia-autosuggest]` near the input (sibling, par
 ### Minimal example
 
 ```html
-<!-- Navbar -->
+<!-- Navbar search box -->
 <div style="position:relative">
   <input
     type="text"
@@ -383,42 +604,9 @@ Place a container with `[data-algolia-autosuggest]` near the input (sibling, par
     </div>
   </div>
 </div>
-
-<!-- Search results page — reads ?q= from URL automatically via data-algolia-url-state -->
-<div
-  data-algolia
-  data-algolia-app-id="YOUR_APP_ID"
-  data-algolia-api-key="YOUR_SEARCH_KEY"
-  data-algolia-index="search_all"
-  data-algolia-search-mode="empty"
-  data-algolia-url-state
->
-  <input type="text" data-algolia-search placeholder="Search…" />
-
-  <!-- Radio buttons to filter by type -->
-  <div data-algolia-filter="type" data-algolia-value="Car"><input type="radio" name="type" /> Cars</div>
-  <div data-algolia-filter="type" data-algolia-value="Make"><input type="radio" name="type" /> Makes</div>
-  <div data-algolia-filter="type" data-algolia-value="Author"><input type="radio" name="type" /> Authors</div>
-  <div data-algolia-filter="type" data-algolia-value="Page"><input type="radio" name="type" /> Pages</div>
-
-  <!-- Sort -->
-  <select data-algolia-sort>
-    <option value="search_all">Relevance</option>
-    <option value="search_all_date_desc">Newest</option>
-  </select>
-
-  <div data-algolia-list>
-    <div data-algolia-template>
-      <a data-algolia-bind="url" data-algolia-attr="href">
-        <img data-algolia-bind="image" data-algolia-attr="src" />
-        <p data-algolia-bind="title"></p>
-        <p data-algolia-bind="description"></p>
-        <span data-algolia-bind="type"></span>
-      </a>
-    </div>
-  </div>
-</div>
 ```
+
+> This standalone input redirects to (and/or previews results from) a dedicated search results page. For the full federated-search setup — the matching results page, the `search_all` index, and the sync — see [Feature B](#feature-b--federated-search-across-collections).
 
 ## Filters
 
@@ -606,6 +794,7 @@ The search input also works across multi-reference fields — add the field to *
 | Attribute | Element | Description |
 |---|---|---|
 | `data-algolia-count` | any | Displays total number of matches (e.g. `1,786`) |
+| `data-algolia-query` | any | Displays the current search query text. Handy for "Results for *X*" headings on a search page. Empty when there's no active query. |
 | `data-algolia-empty` | any | Shown only when there are no results |
 
 ## Pagination
@@ -809,7 +998,7 @@ You do **not** need to fork or duplicate this repository for every new Webflow s
 |---|---|---|
 | **Client library** (`<script>` tag) | ✅ Fully reusable | Paste the same official jsDelivr `<script>` tag. Each site provides its own credentials via `data-algolia-app-id`, `data-algolia-api-key`, `data-algolia-index`. |
 | **Webhook worker** (Cloudflare) | ✅ Code is reusable | Create a separate Cloudflare Worker per project and paste the same `apps/webhook-worker/src/index.js`. Each Worker gets its own environment variables (different Algolia index + Webflow collection ID). |
-| **Sync app** (Webflow Cloud) | ✅ Code is reusable | Create a separate Webflow Cloud app per Webflow site. You can point multiple Webflow Cloud apps at the **same template repository** — each app has isolated environment variables, so the same code drives different Algolia indexes and Webflow collections. |
+| **Sync app** (Webflow Cloud) | ✅ Code is reusable for Feature A | Create a separate Webflow Cloud app per Webflow site. You can point multiple apps at the **same template repository** — isolated environment variables let the same code drive different filter indexes/collections. **Feature B caveat:** the federated sources live in `search-all-config.ts` (committed code, not env vars), so projects with *different* federated setups need their own repo copy — see below. |
 
 **Per-project resources you always need to create fresh:**
 
@@ -822,6 +1011,7 @@ You do **not** need to fork or duplicate this repository for every new Webflow s
 
 Use the official template directly when the code works for you as-is. Fork (or create your own copy via **Use this template**) only if you need to:
 
+- **Use federated search (Feature B) with project-specific sources** — `search-all-config.ts` is committed code, so each site with a different set of collections/pages needs its own copy of the repo.
 - **Modify the sync logic** — e.g. transform fields differently for a specific project, add custom enrichment, change how reference fields are flattened.
 - **Pin different versions per project** — e.g. keep one client on an older sync deployment while another tracks the latest.
 - **Keep an isolated commit history** for a specific client or site (e.g. for audit or handover reasons).
@@ -883,14 +1073,21 @@ The Inspector never runs in production. It checks the URL parameter, the hostnam
 
 ## Re-running the sync (after schema changes)
 
-After adding new fields, new collections, or modifying references in Webflow, run a full sync:
+After adding new fields, new collections, or modifying references in Webflow, run a full sync of whichever feature(s) you use:
 
 ```bash
+# Feature A — filter index
 curl -X POST https://YOUR_SITE.webflow.io/api/sync \
+  -H "Authorization: Bearer YOUR_SYNC_SECRET"
+
+# Feature B — federated search index
+curl -X POST https://YOUR_SITE.webflow.io/api/search-all \
   -H "Authorization: Bearer YOUR_SYNC_SECRET"
 ```
 
-Or **just publish the site** — the `site_publish` webhook triggers this automatically.
+Or **just publish the site** — the `site_publish` webhook re-runs every configured endpoint automatically.
+
+> After editing `search-all-config.ts` (adding a collection, changing a field mapping), **deploy the sync app** first, then re-run `/api/search-all`.
 
 ## Clearing the index
 
@@ -901,7 +1098,7 @@ In Algolia → your index → **Manage index → Clear index** → type `CLEAR`.
 When a new version is released, update the version tag in the script URL:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.8.2/packages/library/dist/algolia-webflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/felixeallan/algolia-webflow-filter@v0.8.13/packages/library/dist/algolia-webflow.min.js"></script>
 ```
 
 Then **hard refresh** (Cmd/Ctrl+Shift+R) to bypass the browser cache.
@@ -934,6 +1131,10 @@ Returns the raw schema — useful for debugging field types and resolving issues
 | Webhook URL rejected: "Invalid hostname" | Webflow blocks `*.webflow.io` webhooks | Use the Cloudflare Worker URL instead |
 | Items from other collections appear in Algolia | Webhook fires for all collections | Set `WEBFLOW_COLLECTION_ID` in the Cloudflare Worker |
 | Reference field shows an ID instead of name | Old sync, or new reference field | Re-run sync (or publish the site) |
+| Search results show no image | Bound `image.url` instead of `image` | In the federated index `image` is a plain URL string — bind `data-algolia-bind="image"` (Feature B) |
+| Search index never updates on edits | `SEARCH_ALL_ENDPOINT` missing or pointing at the wrong domain | Set it on the worker to the **live** sync-app domain (`https://YOUR_SITE.webflow.io/api/search-all`) and re-deploy the worker |
+| New collection / field mapping not reflected in search | `search-all-config.ts` edited but app not redeployed | Deploy the sync app, then re-run `POST /api/search-all` |
+| Search results page is blank on load | `data-algolia-search-mode="empty"` is set | Expected — results appear once the visitor types. Remove the attribute to show everything by default |
 | Webflow Cloud deploy fails (`Cannot find package esbuild`) | Webflow Cloud installs with `--omit=dev` | All build-time deps must be regular dependencies (already configured in the template) |
 | Webflow Cloud deploy succeeds but routes 500 | Next.js 16.2+ Turbopack output crashes on Workers | Already pinned to ~16.1 with `next build --webpack` |
 
@@ -945,17 +1146,20 @@ Returns the raw schema — useful for debugging field types and resolving issues
 algolia-webflow-filter/
 ├── apps/
 │   ├── sync/                          # Next.js app for Webflow Cloud
-│   │   └── src/app/
-│   │       ├── sync/route.ts          # POST /api/sync — full paginated sync
-│   │       │                          # GET  /api/sync — health check
-│   │       │                          # PUT  /api/sync — schema dump (debug)
-│   │       └── webhook/route.ts       # POST /api/webhook (unused — use Cloudflare Worker instead)
+│   │   └── src/
+│   │       ├── search-all-config.ts   # Feature B — EDIT THIS: collections + static pages
+│   │       └── app/
+│   │           ├── sync/route.ts          # POST /api/sync — Feature A full paginated sync
+│   │           │                          # GET  /api/sync — health check
+│   │           │                          # PUT  /api/sync — schema dump (debug)
+│   │           ├── search-all/route.ts    # POST /api/search-all — Feature B federated sync (generic)
+│   │           └── webhook/route.ts       # POST /api/webhook (unused — use Cloudflare Worker instead)
 │   │
 │   └── webhook-worker/                # Cloudflare Worker
 │       └── src/index.js               # Per-item sync + full sync on site_publish
 │
 └── packages/
-    └── library/                       # Client-side filter library
+    └── library/                       # Client-side library (filtering + federated search)
         ├── src/index.ts               # Source
         └── dist/algolia-webflow.min.js  # Built (served via jsDelivr)
 ```
