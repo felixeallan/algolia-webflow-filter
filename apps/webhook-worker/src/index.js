@@ -13,7 +13,7 @@ async function algoliaDelete(appId, apiKey, indexName, objectID) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'GET') {
       return Response.json({ ok: true })
     }
@@ -32,6 +32,7 @@ export default {
     try {
       const { ALGOLIA_APP_ID, ALGOLIA_ADMIN_API_KEY, ALGOLIA_INDEX_NAME } = env
       const { triggerType, payload } = body
+      console.log('[webhook] triggerType:', triggerType, 'collectionId:', payload?._cid || payload?.collectionId)
 
       // Full re-sync on site publish AND on any create/change event
       // (Per-item upserts would skip reference/option resolution, so we
@@ -42,12 +43,13 @@ export default {
         triggerType === 'collection_item_changed'
       ) {
         const authHeader = { Authorization: `Bearer ${env.SYNC_SECRET}` }
-        await Promise.all([
-          fetch(env.SYNC_ENDPOINT, { method: 'POST', headers: authHeader }),
-          env.SEARCH_ALL_ENDPOINT
-            ? fetch(env.SEARCH_ALL_ENDPOINT, { method: 'POST', headers: authHeader })
-            : Promise.resolve(),
-        ])
+        // Use ctx.waitUntil so the runtime keeps the worker alive until the sync
+        // requests finish. A bare un-awaited fetch() would be cancelled the moment
+        // we return the response, so the sync would never actually run.
+        ctx.waitUntil(fetch(env.SYNC_ENDPOINT, { method: 'POST', headers: authHeader }))
+        if (env.SEARCH_ALL_ENDPOINT) {
+          ctx.waitUntil(fetch(env.SEARCH_ALL_ENDPOINT, { method: 'POST', headers: authHeader }))
+        }
         return Response.json({ success: true, action: 'full_sync_triggered' })
       }
 
