@@ -41,10 +41,13 @@ export default {
         triggerType === 'collection_item_created' ||
         triggerType === 'collection_item_changed'
       ) {
-        await fetch(env.SYNC_ENDPOINT, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${env.SYNC_SECRET}` },
-        })
+        const authHeader = { Authorization: `Bearer ${env.SYNC_SECRET}` }
+        await Promise.all([
+          fetch(env.SYNC_ENDPOINT, { method: 'POST', headers: authHeader }),
+          env.SEARCH_ALL_ENDPOINT
+            ? fetch(env.SEARCH_ALL_ENDPOINT, { method: 'POST', headers: authHeader })
+            : Promise.resolve(),
+        ])
         return Response.json({ success: true, action: 'full_sync_triggered' })
       }
 
